@@ -1,10 +1,10 @@
 const DATA = window.APP_DATA;
 const LS = {
-  sales: 'ranking_sales_actuals_v2',
+  sales: 'ranking_sales_actuals_v4',
   visits: 'ranking_visits_v3',
   overdue: 'ranking_overdue_v2',
-  settings: 'ranking_settings_v2',
-  targets: 'ranking_sales_targets_v2',
+  settings: 'ranking_settings_v4',
+  targets: 'ranking_sales_targets_v4',
   categories: 'ranking_categories_v2',
   ghUrl: 'ranking_gh_visits_url_v2',
   supabase: 'ranking_supabase_v2'
@@ -28,7 +28,8 @@ let settings = loadJSON(LS.settings, DATA.defaults || {});
 settings.weights = settings.weights || (DATA.defaults || {}).weights || {};
 settings.goals = settings.goals || (DATA.defaults || {}).goals || {};
 settings.scoreMode = settings.scoreMode || 'available';
-let salesActuals = loadJSON(LS.sales, {});
+settings.period = settings.period || (DATA.defaults || {}).period || { month: DATA.meta.month, monthName: DATA.meta.monthName };
+let salesActuals = loadJSON(LS.sales, DATA.salesActuals || {});
 let salesTargets = loadJSON(LS.targets, DATA.salesTargets || (DATA.defaults || {}).salesTargets || {});
 let categoryTargets = loadJSON(LS.categories, DATA.categories || (DATA.defaults || {}).categories || []);
 let visits = loadJSON(LS.visits, DATA.visits || []);
@@ -46,6 +47,8 @@ function clamp(n, min = 0, max = 100){ return Math.max(min, Math.min(max, Number
 function statusClass(score){ if(score === null || score === undefined || Number.isNaN(score)) return 'info'; if(score >= 90) return 'good'; if(score >= 70) return 'warn'; return 'bad'; }
 function escapeHtml(str){ return String(str ?? '').replace(/[&<>"]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[m])); }
 function currentAgents(){ return state.agent === '__ALL__' ? DATA.agents : [state.agent]; }
+function activeMonthName(){ return settings?.period?.monthName || DATA.meta.monthName; }
+function activeMonth(){ return settings?.period?.month || DATA.meta.month; }
 
 function init(){
   visits = normalizeVisits(visits);
@@ -53,7 +56,7 @@ function init(){
   renderAgentFilter();
   renderQualityBanner();
   render();
-  document.getElementById('btnExportCurrent').onclick = () => exportCSV(state.currentRows, `${state.tab}_${DATA.meta.month}.csv`);
+  document.getElementById('btnExportCurrent').onclick = () => exportCSV(state.currentRows, `${state.tab}_${activeMonth()}.csv`);
 }
 
 function renderNav(){
@@ -77,6 +80,8 @@ function renderQualityBanner(){
 function render(){
   const title = TABS.find(t => t[0] === state.tab)?.[1] || 'Dashboard';
   document.getElementById('pageTitle').textContent = title;
+  const brandPeriod = document.querySelector('.brand p');
+  if(brandPeriod) brandPeriod.textContent = `Guadalajara · ${activeMonthName()}`;
   const views = { dashboard, ranking, sales, visits: visitsView, recovery, catalog, prospecting, overdue: overdueView, giro, config };
   document.getElementById('viewContainer').innerHTML = views[state.tab]();
   bindAfterRender();
@@ -155,7 +160,7 @@ function dashboard(){
     ${kpiCard('Cobertura catálogo', pct(avgCoverage), `${fmt(complete)} clientes con catálogo completo`, avgCoverage)}
   </div>
   <div class="grid cols-2" style="margin-top:18px">
-    <div class="card"><div class="section-title"><h3>Top ranking disponible</h3><span class="pill info">${DATA.meta.monthName}</span></div>${renderTable(rankingRows, [['rank','#'],['agent','Vendedor'],['score','Puntaje'],['salesScore','Ventas'],['visitScore','Visitas'],['recoveryScore','Recup.'],['catalogScore','Catálogo'],['prospectingScore','Prospectos'],['overdueScore','Cartera']], { limit: 5, formatters: scoreFormatters() })}</div>
+    <div class="card"><div class="section-title"><h3>Top ranking disponible</h3><span class="pill info">${activeMonthName()}</span></div>${renderTable(rankingRows, [['rank','#'],['agent','Vendedor'],['score','Puntaje'],['salesScore','Ventas'],['visitScore','Visitas'],['recoveryScore','Recup.'],['catalogScore','Catálogo'],['prospectingScore','Prospectos'],['overdueScore','Cartera']], { limit: 5, formatters: scoreFormatters() })}</div>
     <div class="card"><div class="section-title"><h3>Productos recuperados por vendedor</h3><span class="muted small">Top 8</span></div>${barList(chartRows, 'agent', 'recovered')}</div>
   </div>
   <div class="grid cols-2" style="margin-top:18px">
@@ -167,7 +172,7 @@ function dashboard(){
 function alertsHtml(){
   const missingMeta = DATA.agents.filter(a => !targetMin(a));
   const noSalesActual = DATA.agents.filter(a => targetMin(a) && !(Number(salesActuals[a]) > 0)).length;
-  return `<ul class="footnote"><li><b>${noSalesActual}</b> vendedores/rutas con meta pero sin venta real capturada en pesos.</li><li><b>${visits.length}</b> visitas cargadas actualmente desde GitHub/Supabase/local.</li><li><b>${overdue.length}</b> registros de cartera vencida cargados.</li><li><b>${missingMeta.length}</b> vendedores/rutas sin meta de venta: ${missingMeta.map(escapeHtml).join(', ') || 'ninguno'}.</li></ul>`;
+  return `<ul class="footnote"><li><b>${noSalesActual}</b> vendedores/rutas con meta pero sin venta real capturada en pesos.</li><li><b>${visits.length}</b> visitas cargadas actualmente desde Excel/local.</li><li><b>${overdue.length}</b> registros de cartera vencida cargados.</li><li><b>${missingMeta.length}</b> vendedores/rutas sin meta de venta: ${missingMeta.map(escapeHtml).join(', ') || 'ninguno'}.</li></ul>`;
 }
 
 function barList(rows, labelKey, valueKey){
@@ -219,18 +224,72 @@ function scoreFormatters(){ return { score: v => `<span class="pill ${statusClas
 function sales(){
   const rows = DATA.agents.filter(a => currentAgents().includes(a)).map(agent => {
     const m = metricForAgent(agent) || blankMetric(agent);
-    const min = targetMin(agent), max = targetMax(agent), actual = Number(salesActuals[agent]) || '';
-    return { agent, metaMin:min, metaMax:max, salesActual:actual, progress: min && actual ? Number(actual) / min * 100 : null, missing: min && actual ? Math.max(0, min - Number(actual)) : null, qtyMay:m.qtyMay || 0, clientsMay:m.clientsMay || 0 };
+    const min = targetMin(agent), max = targetMax(agent);
+    const actualRaw = salesActuals[agent];
+    const hasActual = actualRaw !== undefined && actualRaw !== null && actualRaw !== '';
+    const actual = hasActual ? Number(actualRaw) : '';
+    return { agent, metaMin:min, metaMax:max, salesActual:actual, progress: min && hasActual ? actual / min * 100 : null, missing: min && hasActual ? Math.max(0, min - actual) : null, qtyMay:m.qtyMay || 0, clientsMay:m.clientsMay || 0 };
   });
+  const totalActual = rows.reduce((a,r) => a + (Number(r.salesActual) || 0), 0);
+  const totalMin = rows.reduce((a,r) => a + (Number(r.metaMin) || 0), 0);
+  const totalMax = rows.reduce((a,r) => a + (Number(r.metaMax) || 0), 0);
+  const totalProgress = totalMin ? totalActual / totalMin * 100 : null;
   state.currentRows = rows;
-  return `<div class="card"><div class="section-title"><h3>Meta de ventas · ${DATA.meta.monthName}</h3><button class="btn secondary" id="clearSales">Limpiar ventas capturadas</button></div><p class="footnote">Las metas mínimas/máximas quedan fijas como base de Mayo y se modifican cada mes desde Configuración. La venta real en pesos se captura aquí o se importa desde Excel.</p>${renderTable(rows, [['agent','Vendedor'],['metaMin','Meta mínima'],['metaMax','Meta máxima'],['salesInput','Venta real mayo'],['progress','Avance'],['missing','Faltante'],['qtyMay','Cantidad Mayo'],['clientsMay','Clientes Mayo']], { scroll:true, formatters:{ metaMin:money, metaMax:money, progress:pct, missing:money, salesInput:(v,row) => `<input class="sales-input" data-agent="${escapeHtml(row.agent)}" type="number" min="0" step="1" value="${salesActuals[row.agent] || ''}" placeholder="Venta $" />` } })}<div class="card inner-card"><h3>Pegar ventas por vendedor</h3><div class="form-row"><div class="field"><label>Formato CSV o pegado desde Excel</label><textarea id="salesPaste" class="textarea" placeholder="vendedor,venta\nGDL6 - DANIEL  AGUILAR,2710000"></textarea></div><div class="field"><label>Ayuda</label><p class="footnote">Puedes pegar dos columnas: vendedor y venta. Se guarda sólo en este navegador.</p></div><button class="btn" id="importSales">Importar ventas</button></div></div></div>`;
+  return `<div class="grid cols-3">
+    ${kpiCard('Venta real cargada', money(totalActual), `Meta mínima: ${money(totalMin)} · Avance: ${pct(totalProgress)}`, totalProgress)}
+    ${kpiCard('Meta máxima', money(totalMax), `Periodo activo: ${activeMonthName()}`, null)}
+    ${kpiCard('Vendedores/rutas', fmt(rows.length), `${rows.filter(r => Number(r.salesActual) > 0).length} con venta cargada`, null)}
+  </div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Meta de ventas · ${activeMonthName()}</h3><button class="btn secondary" id="clearSales">Limpiar ventas capturadas</button></div><p class="footnote">La venta real de Mayo ya queda precargada con la información que compartiste. Cada mes puedes importar un Excel/CSV con dos columnas: <b>ALMACEN AGRUPADO</b> y <b>VENTA MES</b>, o <b>vendedor</b> y <b>venta</b>.</p>${renderTable(rows, [['agent','Vendedor'],['metaMin','Meta mínima'],['metaMax','Meta máxima'],['salesInput','Venta real'],['progress','Avance'],['missing','Faltante'],['qtyMay','Cantidad Mayo'],['clientsMay','Clientes Mayo']], { scroll:true, formatters:{ metaMin:money, metaMax:money, progress:pct, missing:money, salesInput:(v,row) => `<input class="sales-input" data-agent="${escapeHtml(row.agent)}" type="number" min="0" step="1" value="${salesActuals[row.agent] || ''}" placeholder="Venta $" />` } })}<div class="card inner-card"><h3>Importar ventas del mes</h3><div class="form-row"><div class="field"><label>Archivo de ventas</label><input id="salesFile" type="file" accept=".xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar desde Excel</label><textarea id="salesPaste" class="textarea" placeholder="ALMACEN AGRUPADO\tVENTA MES\nGDL6 - DANIEL  AGUILAR\t5209577"></textarea></div><div class="field"><label>Ayuda</label><p class="footnote">Acepta .xls tipo HTML exportado por Excel, .csv, .txt o pegado directo. Si tu archivo viene en .xlsx, guárdalo como CSV o .xls antes de cargarlo.</p></div><div><button class="btn" id="importSalesFile">Importar archivo</button><br><button class="btn secondary" id="importSales" style="margin-top:8px">Importar texto pegado</button></div></div></div></div>`;
 }
 function bindSales(){
   document.querySelectorAll('.sales-input').forEach(inp => inp.onchange = () => { salesActuals[inp.dataset.agent] = Number(inp.value) || ''; saveJSON(LS.sales, salesActuals); render(); });
-  const b = document.getElementById('importSales');
-  if(b) b.onclick = () => { parseCSV(document.getElementById('salesPaste').value).forEach(r => { const a = findAgent(r.vendedor || r.agent || r.Vendedor || r[0]); const v = Number(String(r.venta || r.sales || r.Venta || r[1] || 0).replace(/[$,]/g,'')); if(a) salesActuals[a] = v; }); saveJSON(LS.sales, salesActuals); render(); };
+  const pasteBtn = document.getElementById('importSales');
+  if(pasteBtn) pasteBtn.onclick = () => { importSalesRows(parseAny(document.getElementById('salesPaste').value)); };
+  const fileBtn = document.getElementById('importSalesFile');
+  if(fileBtn) fileBtn.onclick = () => {
+    const file = document.getElementById('salesFile')?.files?.[0];
+    if(!file) return alert('Selecciona el archivo de ventas del mes.');
+    if(/\.xlsx$/i.test(file.name)) return alert('Este importador lee CSV, TXT, JSON o .xls HTML. Guarda tu Excel como CSV o .xls y vuelve a cargarlo.');
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const txt = String(reader.result || '');
+        const rows = (/^\s*</.test(txt) || /<table[\s>]/i.test(txt)) ? parseHTMLTable(txt) : parseAny(txt);
+        importSalesRows(rows);
+      }catch(e){ alert('No se pudo importar ventas: ' + e.message); }
+    };
+    reader.onerror = () => alert('No se pudo leer el archivo.');
+    reader.readAsText(file, 'utf-8');
+  };
   const c = document.getElementById('clearSales');
   if(c) c.onclick = () => { if(confirm('¿Limpiar ventas reales capturadas?')){ salesActuals = {}; saveJSON(LS.sales, salesActuals); render(); } };
+}
+function cleanNumber(v){
+  if(v === null || v === undefined) return 0;
+  const s = String(v).replace(/\s/g,'').replace(/\$/g,'').replace(/,/g,'');
+  return Number(s) || 0;
+}
+function pickField(row, names){
+  for(const n of names){
+    if(row[n] !== undefined && row[n] !== '') return row[n];
+    const key = Object.keys(row).find(k => norm(k) === norm(n));
+    if(key && row[key] !== '') return row[key];
+  }
+  return '';
+}
+function importSalesRows(rows){
+  let ok = 0, skipped = 0;
+  (rows || []).forEach(r => {
+    const vendedor = pickField(r, ['ALMACEN AGRUPADO','vendedor','Vendedor','agent','AGENTE','ALMACEN','0']) || r[0];
+    const venta = pickField(r, ['VENTA MES','venta','Venta','sales','importe','subtotal','1']) || r[1];
+    const a = findAgent(vendedor);
+    const v = cleanNumber(venta);
+    if(a && v >= 0){ salesActuals[a] = v; ok++; } else skipped++;
+  });
+  saveJSON(LS.sales, salesActuals);
+  alert(`Ventas importadas: ${ok}${skipped ? ` · Registros no reconocidos: ${skipped}` : ''}`);
+  render();
 }
 
 function visitsView(){
@@ -367,16 +426,22 @@ function giro(){
   const rows = DATA.giroByAgent.filter(r => currentAgents().includes(r.agent));
   state.currentRows = rows;
   const top = [...rows].sort((a, b) => (b.qtyMay || 0) - (a.qtyMay || 0)).slice(0, 12);
-  return `<div class="grid cols-2"><div class="card"><div class="section-title"><h3>Venta por giro en cantidades</h3><span class="muted small">${DATA.meta.monthName}</span></div>${barList(top, 'giro', 'qtyMay')}</div><div class="card"><h3>Clientes por giro</h3>${renderTable(DATA.clientSummary.filter(r => currentAgents().includes(r.agent)), [['agent','Vendedor'],['client','Cliente'],['giro','Giro'],['qtyMay','Cantidad Mayo'],['productsMay','Productos Mayo']], { limit:500, scroll:true })}</div></div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Archivo giro de clientes</h3><button class="btn secondary" data-action="export" data-export-key="giro" data-name="giro_clientes.csv">Exportar</button></div>${renderSearchBlock('Buscar cliente/giro')}${renderTable(DATA.giroClients, [['codigo','Código'],['cliente','Cliente'],['giro','Giro'],['subtotal','Subtotal Ene-May'],['pct','% total']], { limit:1000, scroll:true, formatters:{ subtotal:money, pct:v => pct(Number(v) * 100) } })}</div>`;
+  return `<div class="grid cols-2"><div class="card"><div class="section-title"><h3>Venta por giro en cantidades</h3><span class="muted small">${activeMonthName()}</span></div>${barList(top, 'giro', 'qtyMay')}</div><div class="card"><h3>Clientes por giro</h3>${renderTable(DATA.clientSummary.filter(r => currentAgents().includes(r.agent)), [['agent','Vendedor'],['client','Cliente'],['giro','Giro'],['qtyMay','Cantidad Mayo'],['productsMay','Productos Mayo']], { limit:500, scroll:true })}</div></div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Archivo giro de clientes</h3><button class="btn secondary" data-action="export" data-export-key="giro" data-name="giro_clientes.csv">Exportar</button></div>${renderSearchBlock('Buscar cliente/giro')}${renderTable(DATA.giroClients, [['codigo','Código'],['cliente','Cliente'],['giro','Giro'],['subtotal','Subtotal Ene-May'],['pct','% total']], { limit:1000, scroll:true, formatters:{ subtotal:money, pct:v => pct(Number(v) * 100) } })}</div>`;
 }
 
 function config(){
   const w = settings.weights, g = settings.goals;
   const targetRows = DATA.agents.map(agent => ({ agent, min:targetMin(agent) || '', max:targetMax(agent) || '' }));
-  return `<div class="grid cols-2"><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer</button></div></div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · editable cada mes</h3><span class="pill info">Base cargada: Mayo 2026</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima'],['targetMaxInput','Meta máxima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.min}" placeholder="Meta mínima" />`, targetMaxInput:(v,row) => `<input class="target-max-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.max}" placeholder="Meta máxima" />` } })}<div class="form-row"><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor,meta_minima,meta_maxima\nGDL6 - DANIEL  AGUILAR,2717810,2989591"></textarea></div><button class="btn" id="importTargets">Importar metas</button></div><p class="footnote">Aquí puedes cambiar cada mes la meta mínima y máxima sin mover el diseño de la app.</p></div><div class="card" style="margin-top:18px"><h3>Categorías objetivo para cobertura de clientes</h3><div class="field"><label>Una categoría por línea</label><textarea id="categoriesText" class="textarea small-textarea">${escapeHtml(categoryTargets.join('\n'))}</textarea></div><p class="footnote">Estas categorías se usan para identificar faltantes por cliente. El producto ya viene clasificado automáticamente en el desglose.</p></div><div class="card" style="margin-top:18px"><h3>Estructura esperada para integraciones</h3><p class="footnote"><b>Visitas Excel/CSV:</b> fecha/day/date, vendedor/vendor/agent, cliente/client, tipo/type, ciudad/city, notas/notes, duracion_min o duration_sec.<br><b>Cartera vencida:</b> vendedor, cliente, saldo_vencido, dias_vencido, fecha.<br><b>Venta real:</b> vendedor, venta.</p></div>`;
+  return `<div class="grid cols-2"><div class="card"><h3>Periodo activo</h3><div class="config-grid"><div class="field"><label>Mes</label><input id="periodMonth" type="month" value="${escapeHtml(activeMonth())}"></div><div class="field"><label>Nombre para reportes</label><input id="periodMonthName" type="text" value="${escapeHtml(activeMonthName())}" placeholder="Junio 2026"></div></div><p class="footnote">Al cambiar el periodo, se mantiene el mismo diseño. Sólo actualizas metas y ventas del mes.</p></div><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div></div>
+  <div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer</button></div><div class="card"><h3>Resumen de configuración</h3><p class="footnote"><b>Ventas:</b> se cargan en Meta de Ventas.<br><b>Metas:</b> se editan abajo por vendedor/ruta.<br><b>Visitas:</b> 25 semanales / 100 mensuales por vendedor, editable aquí.</p></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · editable cada mes</h3><span class="pill info">Formato fijo</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima'],['targetMaxInput','Meta máxima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.min}" placeholder="Meta mínima" />`, targetMaxInput:(v,row) => `<input class="target-max-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.max}" placeholder="Meta máxima" />` } })}<div class="form-row"><div class="field"><label>Archivo de metas</label><input id="targetsFile" type="file" accept=".xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor\tmeta_minima\tmeta_maxima\nGDL6 - DANIEL  AGUILAR\t2717810\t2989591"></textarea></div><div><button class="btn" id="importTargetsFile">Importar archivo</button><br><button class="btn secondary" id="importTargets" style="margin-top:8px">Importar texto pegado</button></div></div><p class="footnote">Cada mes puedes actualizar meta mínima y máxima sin modificar el diseño de la app.</p></div>
+  <div class="card" style="margin-top:18px"><h3>Categorías objetivo para cobertura de clientes</h3><div class="field"><label>Una categoría por línea</label><textarea id="categoriesText" class="textarea small-textarea">${escapeHtml(categoryTargets.join('\n'))}</textarea></div><p class="footnote">Estas categorías se usan para identificar faltantes por cliente. El producto ya viene clasificado automáticamente en el desglose.</p></div><div class="card" style="margin-top:18px"><h3>Estructura esperada para integraciones</h3><p class="footnote"><b>Visitas Excel/CSV:</b> fecha/day/date, vendedor/vendor/agent, cliente/client, tipo/type, ciudad/city, notas/notes, duracion_min o duration_sec.<br><b>Cartera vencida:</b> vendedor, cliente, saldo_vencido, dias_vencido, fecha.<br><b>Venta real:</b> ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.<br><b>Metas:</b> vendedor + meta_minima + meta_maxima.</p></div>`;
 }
 function bindConfig(){
   document.getElementById('saveConfig').onclick = () => {
+    settings.period = settings.period || {};
+    settings.period.month = document.getElementById('periodMonth').value || DATA.meta.month;
+    settings.period.monthName = document.getElementById('periodMonthName').value || DATA.meta.monthName;
     document.querySelectorAll('.weight-input').forEach(i => settings.weights[i.dataset.key] = Number(i.value) || 0);
     document.querySelectorAll('.goal-input').forEach(i => settings.goals[i.dataset.key] = Number(i.value) || 0);
     settings.scoreMode = document.getElementById('scoreMode').value;
@@ -388,8 +453,38 @@ function bindConfig(){
   };
   document.getElementById('resetConfig').onclick = () => { settings = clone(DATA.defaults); salesTargets = clone(DATA.salesTargets || DATA.defaults.salesTargets || {}); categoryTargets = clone(DATA.categories || DATA.defaults.categories || []); saveJSON(LS.settings, settings); saveJSON(LS.targets, salesTargets); saveJSON(LS.categories, categoryTargets); render(); };
   const imp = document.getElementById('importTargets');
-  if(imp) imp.onclick = () => { parseCSV(document.getElementById('targetsPaste').value).forEach(r => { const a = findAgent(r.vendedor || r.agent || r.Vendedor || r[0]); if(a){ salesTargets[a] = salesTargets[a] || {}; salesTargets[a].min = Number(String(r.meta_minima || r.min || r[1] || '').replace(/[$,]/g,'')) || null; salesTargets[a].max = Number(String(r.meta_maxima || r.max || r[2] || '').replace(/[$,]/g,'')) || null; } }); saveJSON(LS.targets, salesTargets); render(); };
+  if(imp) imp.onclick = () => { importTargetRows(parseAny(document.getElementById('targetsPaste').value)); };
+  const impFile = document.getElementById('importTargetsFile');
+  if(impFile) impFile.onclick = () => {
+    const file = document.getElementById('targetsFile')?.files?.[0];
+    if(!file) return alert('Selecciona el archivo de metas del mes.');
+    if(/\.xlsx$/i.test(file.name)) return alert('Este importador lee CSV, TXT, JSON o .xls HTML. Guarda tu Excel como CSV o .xls y vuelve a cargarlo.');
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const txt = String(reader.result || '');
+        const rows = (/^\s*</.test(txt) || /<table[\s>]/i.test(txt)) ? parseHTMLTable(txt) : parseAny(txt);
+        importTargetRows(rows);
+      }catch(e){ alert('No se pudo importar metas: ' + e.message); }
+    };
+    reader.onerror = () => alert('No se pudo leer el archivo.');
+    reader.readAsText(file, 'utf-8');
+  };
 }
+function importTargetRows(rows){
+  let ok = 0, skipped = 0;
+  (rows || []).forEach(r => {
+    const vendedor = pickField(r, ['vendedor','Vendedor','agent','AGENTE','ALMACEN AGRUPADO','0']) || r[0];
+    const min = pickField(r, ['meta_minima','META MÍNIMA','META MINIMA','min','Meta mínima','1']) || r[1];
+    const max = pickField(r, ['meta_maxima','META MÁXIMA','META MAXIMA','max','Meta máxima','2']) || r[2];
+    const a = findAgent(vendedor);
+    if(a){ salesTargets[a] = salesTargets[a] || {}; salesTargets[a].min = cleanNumber(min) || null; salesTargets[a].max = cleanNumber(max) || null; ok++; } else skipped++;
+  });
+  saveJSON(LS.targets, salesTargets);
+  alert(`Metas importadas: ${ok}${skipped ? ` · Registros no reconocidos: ${skipped}` : ''}`);
+  render();
+}
+
 function labelWeight(k){ return ({ sales:'Meta Ventas', visits:'Visitas', recovery:'Recuperación', catalog:'Catálogo', prospecting:'Prospección', overdue:'Cartera' })[k] || k; }
 function labelGoal(k){ return ({ weeklyVisits:'Visitas semanales', monthlyVisits:'Visitas mensuales', catalogIncrements:'Meta nuevos productos', prospects:'Meta prospectos', overdueMax:'Máx. cartera vencida' })[k] || k; }
 

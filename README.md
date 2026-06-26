@@ -1,38 +1,10 @@
-# Ranking Vendedores GDL · Mayo 2026
+# Ranking Vendedores GDL · v4
 
-App ejecutiva para medir ranking por vendedor y KPI:
+Actualización incluida:
 
-- Meta de Ventas
-- Visitas a clientes
-- Recuperación de Productos
-- Incremento de Catálogo
-- Prospección
-- Cartera Vencida
+- Venta real de Mayo precargada en **Meta de Ventas** con la tabla compartida.
+- En **Meta de Ventas** ya se puede importar archivo de ventas del mes. Formato aceptado: `.xls` tipo HTML, `.csv`, `.txt` o `.json`. Columnas recomendadas: `ALMACEN AGRUPADO` y `VENTA MES`.
+- En **Configuración** se puede cambiar el periodo activo, editar metas por vendedor/ruta e importar archivo de metas cada mes.
+- El diseño y formato quedan fijos; sólo se actualizan ventas, metas, visitas y cartera vencida por archivo o captura.
 
-## Visitas
-
-La sección **Visitas clientes** ya trae precargado el archivo de mayo:
-
-`admin_visitas_todo_2026-05-01_a_2026-05-31.xls`
-
-También puedes reemplazarlo cada mes con el botón **Importar Excel**.
-
-Formato compatible para importar visitas:
-
-- `day`, `fecha` o `date`
-- `city` o `ciudad`
-- `vendor`, `vendedor` o `agent`
-- `client` o `cliente`
-- `type` o `tipo`
-- `notes` o `notas`
-- `duration_sec`, `duration_min` o `duracion_min`
-
-El Excel exportado como `.xls` tipo HTML desde la app de visitas se lee directo. Si tienes un `.xlsx` real, guárdalo como `.csv` o `.xls` antes de importarlo.
-
-## Metas
-
-Las metas de venta de mayo están cargadas como base. Para cambiar metas cada mes entra a **Configuración > Metas de venta por vendedor**.
-
-## Uso
-
-Abre `index.html` en el navegador. La información que importes se guarda en el navegador local.
+Nota: Si el archivo viene como `.xlsx`, guárdalo desde Excel como CSV o `.xls` antes de cargarlo en la app.
