@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ranking Vendedores GDL · Toyo Foods</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">TF</div>
+        <div>
+          <h1>Ranking Vendedores</h1>
+          <p>Guadalajara · Mayo 2026</p>
+        </div>
+      </div>
+      <nav id="navTabs" class="nav-tabs"></nav>
+      <div class="side-note">
+        <strong>Meta visitas</strong><br>
+        25 por semana · 100 mensual por vendedor
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Dashboard Comercial</span>
+          <h2 id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="toolbar">
+          <select id="agentFilter"></select>
+          <button class="btn secondary" id="btnExportCurrent">Exportar hoja CSV</button>
+        </div>
+      </header>
+
+      <section id="qualityBanner" class="banner"></section>
+      <section id="viewContainer"></section>
+    </main>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
