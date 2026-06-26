@@ -1,42 +1,38 @@
-# Ranking Vendedores GDL · Toyo Foods
+# Ranking Vendedores GDL · Mayo 2026
 
-App local en HTML/CSS/JS para medir KPIs por vendedor.
+App ejecutiva para medir ranking por vendedor y KPI:
 
-## Hojas / secciones
-- Dashboard ejecutivo
-- Tabulador ranking
 - Meta de Ventas
 - Visitas a clientes
 - Recuperación de Productos
 - Incremento de Catálogo
 - Prospección
 - Cartera Vencida
-- Giro de Clientes
-- Configuración
 
-## Cambios incluidos
-- Metas de Mayo 2026 integradas como base fija, con edición mensual en Configuración.
-- Incremento de catálogo con categoría por producto, vendedor, cliente y cobertura de categorías por cliente.
-- Recuperación de productos con categoría por producto, recuperados y pendientes por recuperar.
-- Prospección con ventanas/tablas con scroll.
-- Conexión de visitas por GitHub Raw o Supabase.
+## Visitas
 
-## Visitas desde Supabase
-La app pide:
-1. Supabase URL, por ejemplo: `https://xxxxx.supabase.co`
-2. Publishable / Anon key.
-3. Nombre de la tabla. Default: `visits`.
-4. Campo fecha. Default: `day`.
+La sección **Visitas clientes** ya trae precargado el archivo de mayo:
 
-Campos compatibles en la tabla:
+`admin_visitas_todo_2026-05-01_a_2026-05-31.xls`
+
+También puedes reemplazarlo cada mes con el botón **Importar Excel**.
+
+Formato compatible para importar visitas:
+
 - `day`, `fecha` o `date`
+- `city` o `ciudad`
 - `vendor`, `vendedor` o `agent`
 - `client` o `cliente`
 - `type` o `tipo`
-- `city` o `ciudad`
+- `notes` o `notas`
 - `duration_sec`, `duration_min` o `duracion_min`
 
-Para que funcione desde navegador, la tabla debe permitir lectura con RLS/policy de SELECT para la key pública.
+El Excel exportado como `.xls` tipo HTML desde la app de visitas se lee directo. Si tienes un `.xlsx` real, guárdalo como `.csv` o `.xls` antes de importarlo.
+
+## Metas
+
+Las metas de venta de mayo están cargadas como base. Para cambiar metas cada mes entra a **Configuración > Metas de venta por vendedor**.
 
 ## Uso
-Abrir `index.html` en el navegador. La información que captures manualmente se guarda en localStorage del navegador.
+
+Abre `index.html` en el navegador. La información que importes se guarda en el navegador local.

@@ -1,7 +1,7 @@
 const DATA = window.APP_DATA;
 const LS = {
   sales: 'ranking_sales_actuals_v2',
-  visits: 'ranking_visits_v2',
+  visits: 'ranking_visits_v3',
   overdue: 'ranking_overdue_v2',
   settings: 'ranking_settings_v2',
   targets: 'ranking_sales_targets_v2',
@@ -31,7 +31,7 @@ settings.scoreMode = settings.scoreMode || 'available';
 let salesActuals = loadJSON(LS.sales, {});
 let salesTargets = loadJSON(LS.targets, DATA.salesTargets || (DATA.defaults || {}).salesTargets || {});
 let categoryTargets = loadJSON(LS.categories, DATA.categories || (DATA.defaults || {}).categories || []);
-let visits = loadJSON(LS.visits, []);
+let visits = loadJSON(LS.visits, DATA.visits || []);
 let overdue = loadJSON(LS.overdue, []);
 
 function clone(o){ return JSON.parse(JSON.stringify(o || {})); }
@@ -48,6 +48,7 @@ function escapeHtml(str){ return String(str ?? '').replace(/[&<>"]/g, m => ({ '&
 function currentAgents(){ return state.agent === '__ALL__' ? DATA.agents : [state.agent]; }
 
 function init(){
+  visits = normalizeVisits(visits);
   renderNav();
   renderAgentFilter();
   renderQualityBanner();
@@ -70,7 +71,7 @@ function renderAgentFilter(){
 
 function renderQualityBanner(){
   const b = document.getElementById('qualityBanner');
-  b.innerHTML = `<strong>Notas de datos:</strong> ${DATA.meta.notes.map(escapeHtml).join(' · ')}<br><span class="small">Metas editables por mes en Configuración · Visitas vía GitHub Raw o Supabase.</span>`;
+  b.innerHTML = `<strong>Notas de datos:</strong> ${DATA.meta.notes.map(escapeHtml).join(' · ')}<br><span class="small">Metas editables por mes en Configuración · Visitas importables desde Excel/CSV.</span>`;
 }
 
 function render(){
@@ -235,52 +236,78 @@ function bindSales(){
 function visitsView(){
   const rows = visitSummaryRows();
   state.currentRows = rows;
-  const sbSaved = loadJSON(LS.supabase, {});
-  return `<div class="grid cols-2"><div class="card"><h3>Conectar visitas desde GitHub Raw</h3><div class="field"><label>URL pública raw CSV/JSON</label><input id="ghUrl" value="${escapeHtml(localStorage.getItem(LS.ghUrl) || '')}" placeholder="https://raw.githubusercontent.com/usuario/repo/main/visitas.json" /></div><div style="margin-top:10px"><button class="btn" id="loadGithub">Cargar GitHub</button> <button class="btn secondary" id="clearVisits">Limpiar visitas</button></div><p class="footnote">No coloques token privado de GitHub en el navegador. Para repo privado conviene usar Supabase o un JSON público generado por GitHub Actions.</p></div><div class="card"><h3>Conectar visitas desde Supabase</h3><div class="field"><label>Supabase URL</label><input id="sbUrl" value="${escapeHtml(sbSaved.url || '')}" placeholder="https://xxxxx.supabase.co" /></div><div class="field" style="margin-top:8px"><label>Publishable / Anon key</label><input id="sbKey" value="${escapeHtml(sbSaved.key || '')}" placeholder="sb_publishable_... o eyJ..." /></div><div class="config-grid" style="margin-top:8px"><div class="field"><label>Tabla</label><input id="sbTable" value="${escapeHtml(sbSaved.table || 'visits')}" /></div><div class="field"><label>Campo fecha</label><input id="sbDateField" value="${escapeHtml(sbSaved.dateField || 'day')}" /></div></div><div style="margin-top:10px"><button class="btn" id="loadSupabase">Cargar Supabase</button></div><p class="footnote">Campos compatibles: day/fecha/date, vendor/vendedor/agent, client/cliente, type/tipo, city/ciudad, duration_sec/duracion_min.</p></div></div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Avance de visitas por vendedor</h3><span class="pill info">Meta mensual: ${fmt(settings.goals.monthlyVisits)} visitas</span></div>${renderTable(rows, [['agent','Vendedor'],['visits','Visitas'],['clients','Clientes únicos'],['progress','Avance'],['weeklyGoal','Meta semanal'],['monthlyGoal','Meta mensual']], { scroll:true, formatters:{ progress:pct } })}</div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Detalle de visitas cargadas</h3><button class="btn secondary" data-action="export" data-export-key="visits" data-name="visitas_cargadas.csv">Exportar detalle</button></div>${renderSearchBlock('Buscar visita')}${renderTable(visitsForCurrentAgent(), [['date','Fecha'],['agent','Vendedor'],['client','Cliente'],['type','Tipo'],['city','Ciudad'],['durationMin','Min.']], { limit:800, scroll:true })}</div>`;
+  const vr = visitDateRange(visitsForCurrentAgent());
+  const matched = visitsMatchedToAgents().length;
+  return `<div class="grid cols-3">
+    ${kpiCard('Visitas importadas', fmt(visits.length), vr ? `${vr.from} a ${vr.to}` : 'Carga un Excel de visitas', null)}
+    ${kpiCard('Visitas GDL reconocidas', fmt(matched), 'Sólo vendedores del ranking actual', null)}
+    ${kpiCard('Meta mensual por vendedor', fmt(settings.goals.monthlyVisits), `Meta semanal: ${fmt(settings.goals.weeklyVisits)}`, null)}
+  </div>
+  <div class="card" style="margin-top:18px">
+    <div class="section-title"><h3>Importar visitas desde Excel</h3><span class="pill info">Acepta .xls HTML, .csv, .txt</span></div>
+    <div class="form-row">
+      <div class="field"><label>Archivo de visitas del mes</label><input id="visitsFile" type="file" accept=".xls,.html,.csv,.txt,.json" /></div>
+      <div class="field"><label>Formato esperado</label><p class="footnote">Columnas compatibles: day/fecha/date, city/ciudad, vendor/vendedor/agent, client/cliente, type/tipo, notes/notas, duration_sec o duracion_min. El archivo que exporta tu app de visitas como .xls se lee directo.</p></div>
+      <div><button class="btn" id="importVisitsFile">Importar Excel</button> <button class="btn secondary" id="clearVisits">Limpiar visitas</button></div>
+    </div>
+    <p class="footnote">La carga se guarda en este navegador. Cada mes puedes importar el Excel nuevo y se recalcula el avance de visitas automáticamente.</p>
+  </div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Avance de visitas por vendedor</h3><span class="pill info">Meta mensual: ${fmt(settings.goals.monthlyVisits)} visitas</span></div>${renderTable(rows, [['agent','Vendedor'],['visits','Visitas'],['clients','Clientes únicos'],['progress','Avance'],['weeklyGoal','Meta semanal'],['monthlyGoal','Meta mensual']], { scroll:true, formatters:{ progress:pct } })}</div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Detalle de visitas cargadas</h3><button class="btn secondary" data-action="export" data-export-key="visits" data-name="visitas_cargadas.csv">Exportar detalle</button></div>${renderSearchBlock('Buscar visita/vendedor/cliente/tipo')}${renderTable(visitsForCurrentAgent(), [['date','Fecha'],['agent','Vendedor ranking'],['rawVendor','Vendedor archivo'],['client','Cliente'],['type','Tipo'],['city','Ciudad'],['durationMin','Min.'],['notes','Notas']], { limit:1200, scroll:true })}</div>`;
 }
 function bindVisits(){
-  const gh = document.getElementById('loadGithub');
-  if(gh) gh.onclick = async () => {
-    const url = document.getElementById('ghUrl').value.trim();
-    localStorage.setItem(LS.ghUrl, url);
-    if(!url) return alert('Pega la URL raw de GitHub.');
-    try{ const txt = await fetch(url).then(r => { if(!r.ok) throw new Error(r.status); return r.text(); }); visits = normalizeVisits(parseAny(txt)); saveJSON(LS.visits, visits); alert(`Visitas cargadas: ${visits.length}`); render(); }
-    catch(e){ alert('No se pudo cargar GitHub Raw: ' + e.message); }
-  };
-  const sb = document.getElementById('loadSupabase');
-  if(sb) sb.onclick = async () => {
-    const url = document.getElementById('sbUrl').value.trim().replace(/\/$/, '');
-    const key = document.getElementById('sbKey').value.trim();
-    const table = (document.getElementById('sbTable').value.trim() || 'visits').replace(/[^a-zA-Z0-9_]/g, '');
-    const dateField = (document.getElementById('sbDateField').value.trim() || 'day').replace(/[^a-zA-Z0-9_]/g, '');
-    saveJSON(LS.supabase, { url, key, table, dateField });
-    if(!url || !key) return alert('Captura Supabase URL y publishable/anon key.');
-    try{
-      const from = `${DATA.meta.month}-01`;
-      const to = `${DATA.meta.month}-31`;
-      const endpoint = `${url}/rest/v1/${table}?select=*&${dateField}=gte.${from}&${dateField}=lte.${to}`;
-      const res = await fetch(endpoint, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
-      if(!res.ok) throw new Error(await res.text());
-      const js = await res.json();
-      visits = normalizeVisits(js); saveJSON(LS.visits, visits); alert(`Visitas cargadas: ${visits.length}`); render();
-    }catch(e){ alert('No se pudo cargar Supabase: ' + e.message); }
+  const importBtn = document.getElementById('importVisitsFile');
+  if(importBtn) importBtn.onclick = () => {
+    const file = document.getElementById('visitsFile')?.files?.[0];
+    if(!file) return alert('Selecciona el archivo Excel de visitas.');
+    if(/\.xlsx$/i.test(file.name)) return alert('Este importador lee el .xls que exporta tu app de visitas, CSV, TXT o JSON. Si tu archivo es .xlsx, guárdalo como .xls HTML o CSV y vuelve a cargarlo.');
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const parsed = parseVisitsFileText(String(reader.result || ''), file.name);
+        visits = normalizeVisits(parsed);
+        saveJSON(LS.visits, visits);
+        alert(`Visitas importadas: ${visits.length}`);
+        render();
+      }catch(e){ alert('No se pudo importar el archivo: ' + e.message); }
+    };
+    reader.onerror = () => alert('No se pudo leer el archivo.');
+    reader.readAsText(file, 'utf-8');
   };
   const clear = document.getElementById('clearVisits');
   if(clear) clear.onclick = () => { if(confirm('¿Limpiar visitas cargadas en este navegador?')){ visits = []; saveJSON(LS.visits, visits); render(); } };
 }
+function parseVisitsFileText(txt, fileName){
+  const trimmed = txt.trim();
+  if(!trimmed) return [];
+  if(/^</.test(trimmed) || /<table[\s>]/i.test(trimmed)) return parseHTMLTable(trimmed);
+  return parseAny(trimmed);
+}
+function parseHTMLTable(html){
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const table = doc.querySelector('table');
+  if(!table) throw new Error('No encontré una tabla dentro del archivo.');
+  const trs = Array.from(table.querySelectorAll('tr'));
+  const matrix = trs.map(tr => Array.from(tr.querySelectorAll('th,td')).map(td => td.textContent.trim()));
+  if(matrix.length < 2) return [];
+  const headers = matrix[0].map(h => h.trim());
+  return matrix.slice(1).filter(r => r.some(Boolean)).map(r => { const o = {}; headers.forEach((h, i) => o[h] = r[i] ?? ''); return o; });
+}
 function normalizeVisits(arr){
-  return arr.map(r => {
-    const rawDate = r.date || r.fecha || r.day || r.start_ts || r.created_at || '';
+  return (arr || []).map(r => {
+    const rawDate = r.date || r.fecha || r.day || r.Fecha || r.start_ts || r.created_at || '';
     const date = String(rawDate).slice(0,10);
-    const vendor = r.agent || r.vendedor || r.vendor || r.Vendedor || r.seller || '';
+    const vendor = r.agent || r.vendedor || r.vendor || r.Vendedor || r.seller || r.rawVendor || '';
     const agent = findAgent(vendor) || vendor;
     const client = r.client || r.cliente || r.customer || r.Cliente || '';
     const type = r.type || r.tipo || r.Tipo || '';
     const city = r.city || r.ciudad || r.Ciudad || '';
-    const durationMin = r.durationMin || r.duracion_min || r.duration_min || (r.duration_sec ? Math.round(Number(r.duration_sec) / 60) : '');
-    return { date, agent, client, type, city, durationMin };
+    const notes = r.notes || r.notas || r.Notes || r.observaciones || '';
+    const durationMin = r.durationMin || r.duracion_min || r.duration_min || r['duracion min'] || (r.duration_sec ? Math.round(Number(r.duration_sec) / 60) : '');
+    return { date, agent, rawVendor: vendor, client, type, city, durationMin, notes };
   }).filter(r => r.date && r.agent);
 }
+function visitsMatchedToAgents(){ return visits.filter(r => DATA.agents.some(a => matchAgent(r.agent, a))); }
 function countVisitsForAgents(agents){
   const rows = visits.filter(r => agents.some(a => matchAgent(r.agent, a)));
   return { count: rows.length, clients: new Set(rows.map(r => norm(r.client))).size };
@@ -289,6 +316,10 @@ function visitSummaryRows(){
   return DATA.agents.filter(a => currentAgents().includes(a)).map(a => { const c = countVisitsForAgents([a]); return { agent:a, visits:c.count, clients:c.clients, progress: visits.length ? c.count / settings.goals.monthlyVisits * 100 : null, weeklyGoal:settings.goals.weeklyVisits, monthlyGoal:settings.goals.monthlyVisits }; });
 }
 function visitsForCurrentAgent(){ return visits.filter(r => state.agent === '__ALL__' || matchAgent(r.agent, state.agent)); }
+function visitDateRange(rows){
+  const dates = rows.map(r => r.date).filter(Boolean).sort();
+  return dates.length ? { from:dates[0], to:dates[dates.length - 1] } : null;
+}
 
 function recovery(){
   const rows = metricRows().map(m => ({ agent:m.agent, recovered:m.recovered || 0, recoveredClients:m.recoveredClients || 0, lostPotential:m.lostPotential || 0, lostClients:m.lostClients || 0, recoveryRate:m.recoveryRate, qtyRecovered:m.qtyRecovered || 0 }));
@@ -342,7 +373,7 @@ function giro(){
 function config(){
   const w = settings.weights, g = settings.goals;
   const targetRows = DATA.agents.map(agent => ({ agent, min:targetMin(agent) || '', max:targetMax(agent) || '' }));
-  return `<div class="grid cols-2"><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer</button></div></div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · editable cada mes</h3><span class="pill info">Base cargada: Mayo 2026</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima'],['targetMaxInput','Meta máxima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.min}" placeholder="Meta mínima" />`, targetMaxInput:(v,row) => `<input class="target-max-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.max}" placeholder="Meta máxima" />` } })}<div class="form-row"><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor,meta_minima,meta_maxima\nGDL6 - DANIEL  AGUILAR,2717810,2989591"></textarea></div><button class="btn" id="importTargets">Importar metas</button></div><p class="footnote">Aquí puedes cambiar cada mes la meta mínima y máxima sin mover el diseño de la app.</p></div><div class="card" style="margin-top:18px"><h3>Categorías objetivo para cobertura de clientes</h3><div class="field"><label>Una categoría por línea</label><textarea id="categoriesText" class="textarea small-textarea">${escapeHtml(categoryTargets.join('\n'))}</textarea></div><p class="footnote">Estas categorías se usan para identificar faltantes por cliente. El producto ya viene clasificado automáticamente en el desglose.</p></div><div class="card" style="margin-top:18px"><h3>Estructura esperada para integraciones</h3><p class="footnote"><b>Visitas GitHub/Supabase:</b> fecha/day/date, vendedor/vendor/agent, cliente/client, tipo/type, ciudad/city, duracion_min o duration_sec.<br><b>Cartera vencida:</b> vendedor, cliente, saldo_vencido, dias_vencido, fecha.<br><b>Venta real:</b> vendedor, venta.</p></div>`;
+  return `<div class="grid cols-2"><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer</button></div></div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · editable cada mes</h3><span class="pill info">Base cargada: Mayo 2026</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima'],['targetMaxInput','Meta máxima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.min}" placeholder="Meta mínima" />`, targetMaxInput:(v,row) => `<input class="target-max-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.max}" placeholder="Meta máxima" />` } })}<div class="form-row"><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor,meta_minima,meta_maxima\nGDL6 - DANIEL  AGUILAR,2717810,2989591"></textarea></div><button class="btn" id="importTargets">Importar metas</button></div><p class="footnote">Aquí puedes cambiar cada mes la meta mínima y máxima sin mover el diseño de la app.</p></div><div class="card" style="margin-top:18px"><h3>Categorías objetivo para cobertura de clientes</h3><div class="field"><label>Una categoría por línea</label><textarea id="categoriesText" class="textarea small-textarea">${escapeHtml(categoryTargets.join('\n'))}</textarea></div><p class="footnote">Estas categorías se usan para identificar faltantes por cliente. El producto ya viene clasificado automáticamente en el desglose.</p></div><div class="card" style="margin-top:18px"><h3>Estructura esperada para integraciones</h3><p class="footnote"><b>Visitas Excel/CSV:</b> fecha/day/date, vendedor/vendor/agent, cliente/client, tipo/type, ciudad/city, notas/notes, duracion_min o duration_sec.<br><b>Cartera vencida:</b> vendedor, cliente, saldo_vencido, dias_vencido, fecha.<br><b>Venta real:</b> vendedor, venta.</p></div>`;
 }
 function bindConfig(){
   document.getElementById('saveConfig').onclick = () => {
@@ -407,12 +438,37 @@ function rowsForExport(key){
   return state.currentRows;
 }
 
+const AGENT_STOPWORDS = new Set(['GDL','RUTA','OFICINA','CLAVE','AGENTE','DE','DEL','LA','LAS','LOS','EL','Y','A']);
+const AGENT_ALIASES = {
+  'YEPEZ MORA OSCAR ALBERTO':'GDL1 - OSCAR YEPEZ',
+  'AGUILAR NERI DANIEL':'GDL6 - DANIEL  AGUILAR',
+  'DE LA CRUZ PONCE JULIO CESAR':'GDL4 - JULIO DE LA CRUZ',
+  'PEREZ MAR ALAN ROBERTO':'GDL5 - ALAN PEREZ',
+  'REYNOSO AGUILAR MARICELA':'GDL3 - MARICELA REYNOSO',
+  'SIERRA DE ANDA ALDO':'GDL15 - ALDO SIERRA',
+  'VELEZ CASTELLANOS ANTONIO':'GDL9 - ANTONIO V.',
+  'AGUIRRE OJEDA ARCENIO':'GDL14- ARCENIO AGUIRRE',
+  'NAVARRO NAVARRO SANDRA':'GDL13 - SANDRA NAVARRO',
+  'SANDRA NAVARRO NAVARRO':'GDL13 - SANDRA NAVARRO',
+  'GARIBAY ORTIZ SERGIO JOEL':'AGENTE CLAVE  GDL',
+  'SANCHEZ ESMERALDA':'OFICINA GDL'
+};
+function agentTokens(txt){ return norm(txt).split(' ').filter(w => w.length > 1 && !AGENT_STOPWORDS.has(w) && !/^\d+$/.test(w)); }
 function findAgent(txt){
   const n = norm(txt); if(!n) return null;
+  if(AGENT_ALIASES[n]) return AGENT_ALIASES[n];
   let exact = DATA.agents.find(a => norm(a) === n); if(exact) return exact;
   exact = DATA.agents.find(a => n.includes(norm(a)) || norm(a).includes(n)); if(exact) return exact;
-  const words = n.split(' ').filter(w => w.length > 2);
-  return DATA.agents.find(a => words.length && words.every(w => norm(a).includes(w))) || null;
+  const inputTokens = agentTokens(n);
+  let best = null, bestScore = 0, bestHits = 0;
+  for(const a of DATA.agents){
+    const at = agentTokens(a).filter(t => t !== 'GDL');
+    if(!at.length) continue;
+    const hits = at.filter(t => inputTokens.includes(t)).length;
+    const score = hits / at.length;
+    if(score > bestScore || (score === bestScore && hits > bestHits)){ best = a; bestScore = score; bestHits = hits; }
+  }
+  return bestScore >= 0.8 ? best : null;
 }
 function matchAgent(a, b){ const fa = findAgent(a) || a; const fb = findAgent(b) || b; return norm(fa) === norm(fb); }
 function renderSearchBlock(ph){ return `<div class="search-row"><input id="tableSearch" placeholder="${escapeHtml(ph)}" /><span class="muted small">La búsqueda filtra la tabla visible.</span></div>`; }
