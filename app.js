@@ -1,11 +1,11 @@
 const DATA = window.APP_DATA;
 const LS = {
-  sales: 'ranking_sales_actuals_v5',
-  visits: 'ranking_visits_v5',
-  overdue: 'ranking_overdue_v5',
-  settings: 'ranking_settings_v5',
-  targets: 'ranking_sales_targets_v5',
-  categories: 'ranking_categories_v5'
+  sales: 'ranking_sales_actuals_v6',
+  visits: 'ranking_visits_v6',
+  overdue: 'ranking_overdue_v6',
+  settings: 'ranking_settings_v6',
+  targets: 'ranking_sales_targets_v6',
+  categories: 'ranking_categories_v6'
 };
 
 const TABS = [
@@ -72,7 +72,7 @@ function renderAgentFilter(){
 
 function renderQualityBanner(){
   const b = document.getElementById('qualityBanner');
-  b.innerHTML = `<strong>Notas de datos:</strong> ${DATA.meta.notes.map(escapeHtml).join(' · ')}<br><span class="small">Todas las cargas de archivos se hacen desde Configuración: ventas, metas, visitas y cartera vencida.</span>`;
+  b.innerHTML = `<strong>Notas de datos:</strong> ${DATA.meta.notes.map(escapeHtml).join(' · ')}<br><span class="small">Todas las cargas de archivos se hacen desde Configuración: ventas, metas, visitas y cartera vencida. La app ya acepta Excel .xlsx/.xls y texto pegado desde Excel.</span>`;
 }
 
 function render(){
@@ -246,12 +246,34 @@ function sales(){
   <div class="card" style="margin-top:18px"><div class="section-title"><h3>Meta de ventas · ${activeMonthName()}</h3><span class="pill info">Carga en Configuración</span></div><p class="footnote">Para mantener limpio el formato, la venta real y las metas mensuales se importan o editan desde <b>Configuración</b>. Esta hoja queda sólo para revisar avance, faltante y porcentaje por vendedor/ruta.</p>${renderTable(rows, [['agent','Vendedor'],['metaMin','Meta mínima'],['metaMax','Meta máxima'],['salesActual','Venta real'],['progress','Avance'],['missing','Faltante'],['qtyMay','Cantidad histórica'],['clientsMay','Clientes históricos']], { scroll:true, formatters:{ metaMin:money, metaMax:money, salesActual:money, progress:pct, missing:money } })}</div>`;
 }
 function bindSales(){
-  document.querySelectorAll('.sales-input').forEach(inp => inp.onchange = () => { salesActuals[inp.dataset.agent] = Number(inp.value) || ''; saveJSON(LS.sales, salesActuals); render(); });
+  document.querySelectorAll('.sales-input').forEach(inp => inp.onchange = () => { salesActuals[inp.dataset.agent] = cleanNumber(inp.value) || ''; saveJSON(LS.sales, salesActuals); render(); });
 }
 function cleanNumber(v){
   if(v === null || v === undefined) return 0;
-  const s = String(v).replace(/\s/g,'').replace(/\$/g,'').replace(/,/g,'');
-  return Number(s) || 0;
+  let s = String(v).replace(/\u00A0/g, ' ').trim();
+  if(!s) return 0;
+  const neg = /^\(.*\)$/.test(s) || /^-/.test(s);
+  s = s.replace(/[()]/g, '').replace(/[^0-9,.-]/g, '');
+  // Soporta formatos: $ 8,014,515.66 / 8014515.66 / 8.014.515,66
+  const commaCount = (s.match(/,/g) || []).length;
+  const dotCount = (s.match(/\./g) || []).length;
+  if(commaCount && dotCount){
+    if(s.lastIndexOf(',') > s.lastIndexOf('.')){
+      s = s.replace(/\./g, '').replace(',', '.');
+    }else{
+      s = s.replace(/,/g, '');
+    }
+  }else if(commaCount){
+    const parts = s.split(',');
+    const last = parts[parts.length - 1];
+    s = last.length <= 2 ? parts.slice(0,-1).join('').replace(/,/g,'') + '.' + last : s.replace(/,/g, '');
+  }else if(dotCount > 1){
+    const parts = s.split('.');
+    const last = parts[parts.length - 1];
+    s = last.length <= 2 ? parts.slice(0,-1).join('') + '.' + last : s.replace(/\./g, '');
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? (neg ? -Math.abs(n) : n) : 0;
 }
 function pickField(row, names){
   for(const n of names){
@@ -304,9 +326,7 @@ function parseHTMLTable(html){
   if(!table) throw new Error('No encontré una tabla dentro del archivo.');
   const trs = Array.from(table.querySelectorAll('tr'));
   const matrix = trs.map(tr => Array.from(tr.querySelectorAll('th,td')).map(td => td.textContent.trim()));
-  if(matrix.length < 2) return [];
-  const headers = matrix[0].map(h => h.trim());
-  return matrix.slice(1).filter(r => r.some(Boolean)).map(r => { const o = {}; headers.forEach((h, i) => o[h] = r[i] ?? ''); return o; });
+  return matrixToObjects(matrix);
 }
 function normalizeVisits(arr){
   return (arr || []).map(r => {
@@ -403,11 +423,11 @@ function config(){
   const w = settings.weights, g = settings.goals;
   const targetRows = DATA.agents.map(agent => ({ agent, min:targetMin(agent) || '', max:targetMax(agent) || '' }));
   const salesRows = DATA.agents.map(agent => ({ agent, actual:salesActuals[agent] || '' }));
-  return `<div class="grid cols-2"><div class="card"><h3>Periodo activo</h3><div class="config-grid"><div class="field"><label>Mes</label><input id="periodMonth" type="month" value="${escapeHtml(activeMonth())}"></div><div class="field"><label>Nombre para reportes</label><input id="periodMonthName" type="text" value="${escapeHtml(activeMonthName())}" placeholder="Junio 2026"></div></div><p class="footnote">Al cambiar el periodo, se mantiene el mismo diseño. Sólo actualizas metas, ventas, visitas y cartera desde esta sección.</p></div><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div></div>
-  <div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer junio</button></div><div class="card"><h3>Cargas de archivos del mes</h3><p class="footnote">Desde aquí se alimentan todas las hojas para que las páginas queden limpias: ventas, metas, visitas y cartera vencida.</p><div class="grid cols-2"><div class="field"><label>Ventas del mes</label><input id="salesConfigFile" type="file" accept=".xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Visitas del mes</label><input id="visitsConfigFile" type="file" accept=".xls,.html,.csv,.txt,.json" /></div></div><div style="margin-top:10px"><button class="btn" id="importSalesConfigFile">Importar ventas</button> <button class="btn" id="importVisitsConfigFile">Importar visitas</button> <button class="btn secondary" id="clearVisitsConfig">Limpiar visitas</button></div><p class="footnote">Si el archivo es .xlsx, guárdalo como CSV o .xls antes de importarlo.</p></div></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · ${activeMonthName()}</h3><span class="pill info">Se guarda automático</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima'],['targetMaxInput','Meta máxima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.min}" placeholder="Meta mínima" />`, targetMaxInput:(v,row) => `<input class="target-max-input" data-agent="${escapeHtml(row.agent)}" type="number" value="${row.max}" placeholder="Meta máxima" />` } })}<div class="form-row"><div class="field"><label>Archivo de metas</label><input id="targetsFile" type="file" accept=".xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor\tmeta_minima\tmeta_maxima\nGDL6 - DANIEL  AGUILAR\t5227475.61\t5750223.17"></textarea></div><div><button class="btn" id="importTargetsFile">Importar metas</button><br><button class="btn secondary" id="importTargets" style="margin-top:8px">Importar texto</button></div></div><p class="footnote">Al cambiar cualquier meta se guarda en este navegador y se refleja en Meta de Ventas y Ranking.</p></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Venta real del mes por vendedor</h3><span class="pill info">Editable o importable</span></div>${renderTable(salesRows, [['agent','Vendedor'],['salesInput','Venta real']], { scroll:true, formatters:{ salesInput:(v,row) => `<input class="sales-input" data-agent="${escapeHtml(row.agent)}" type="number" min="0" step="1" value="${salesActuals[row.agent] || ''}" placeholder="Venta $" />` } })}<div class="form-row"><div class="field"><label>Pegar ventas desde Excel</label><textarea id="salesPaste" class="textarea" placeholder="ALMACEN AGRUPADO\tVENTA MES\nGDL6 - DANIEL  AGUILAR\t5209577"></textarea></div><div class="field"><label>Formato</label><p class="footnote">Columnas aceptadas: ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.</p></div><div><button class="btn secondary" id="importSalesConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearSalesConfig" style="margin-top:8px">Limpiar ventas</button></div></div></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Cartera vencida</h3><span class="pill info">Cargar desde el día 5</span></div><div class="form-row"><div class="field"><label>Archivo cartera</label><input id="overdueConfigFile" type="file" accept=".xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar cartera CSV</label><textarea id="overduePaste" class="textarea" placeholder="vendedor,cliente,saldo_vencido,dias_vencido,fecha\nGDL6 - DANIEL  AGUILAR,Cliente ABC,4200,15,2026-06-05"></textarea></div><div><button class="btn" id="importOverdueConfigFile">Importar archivo</button><br><button class="btn secondary" id="importOverdueConfigPaste" style="margin-top:8px">Importar texto</button><br><button class="btn secondary" id="clearOverdueConfig" style="margin-top:8px">Limpiar cartera</button></div></div></div>
+  return `<div class="grid cols-2"><div class="card"><h3>Periodo activo</h3><div class="config-grid"><div class="field"><label>Mes</label><input id="periodMonth" type="month" value="${escapeHtml(activeMonth())}"></div><div class="field"><label>Nombre para reportes</label><input id="periodMonthName" type="text" value="${escapeHtml(activeMonthName())}" placeholder="Junio 2026"></div></div><p class="footnote">Al cambiar el periodo, se mantiene el mismo diseño. Sólo actualizas metas, ventas, visitas y cartera desde esta sección.</p><span id="savedStatus" class="pill info">Listo para editar</span></div><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div></div>
+  <div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer junio</button></div><div class="card"><h3>Cargas de archivos del mes</h3><p class="footnote">Desde aquí se alimentan todas las hojas para que las páginas queden limpias: ventas, metas, visitas y cartera vencida.</p><div class="grid cols-2"><div class="field"><label>Ventas del mes</label><input id="salesConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Visitas del mes</label><input id="visitsConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div></div><div style="margin-top:10px"><button class="btn" id="importSalesConfigFile">Importar ventas</button> <button class="btn" id="importVisitsConfigFile">Importar visitas</button> <button class="btn secondary" id="clearVisitsConfig">Limpiar visitas</button></div><p class="footnote">Ahora acepta Excel .xlsx/.xls, CSV, TXT, JSON y archivos .xls exportados como tabla HTML.</p></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · ${activeMonthName()}</h3><span class="pill info">Se guarda automático</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima'],['targetMaxInput','Meta máxima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${row.min}" placeholder="Meta mínima" />`, targetMaxInput:(v,row) => `<input class="target-max-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${row.max}" placeholder="Meta máxima" />` } })}<div class="form-row"><div class="field"><label>Archivo de metas</label><input id="targetsFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor\tmeta_minima\tmeta_maxima\nGDL6 - DANIEL  AGUILAR\t5227475.61\t5750223.17"></textarea></div><div><button class="btn" id="importTargetsFile">Importar metas</button><br><button class="btn secondary" id="importTargets" style="margin-top:8px">Importar texto</button></div></div><p class="footnote">Al cambiar cualquier meta se guarda en este navegador y se refleja en Meta de Ventas y Ranking.</p></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Venta real del mes por vendedor</h3><span class="pill info">Editable o importable</span></div>${renderTable(salesRows, [['agent','Vendedor'],['salesInput','Venta real']], { scroll:true, formatters:{ salesInput:(v,row) => `<input class="sales-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${salesActuals[row.agent] || ''}" placeholder="Venta $" />` } })}<div class="form-row"><div class="field"><label>Pegar ventas desde Excel</label><textarea id="salesPaste" class="textarea" placeholder="ALMACEN AGRUPADO\tVENTA MES\nGDL6 - DANIEL  AGUILAR\t5209577"></textarea></div><div class="field"><label>Formato</label><p class="footnote">Columnas aceptadas: ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.</p></div><div><button class="btn secondary" id="importSalesConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearSalesConfig" style="margin-top:8px">Limpiar ventas</button></div></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Cartera vencida</h3><span class="pill info">Cargar desde el día 5</span></div><div class="form-row"><div class="field"><label>Archivo cartera</label><input id="overdueConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar cartera CSV</label><textarea id="overduePaste" class="textarea" placeholder="vendedor,cliente,saldo_vencido,dias_vencido,fecha\nGDL6 - DANIEL  AGUILAR,Cliente ABC,4200,15,2026-06-05"></textarea></div><div><button class="btn" id="importOverdueConfigFile">Importar archivo</button><br><button class="btn secondary" id="importOverdueConfigPaste" style="margin-top:8px">Importar texto</button><br><button class="btn secondary" id="clearOverdueConfig" style="margin-top:8px">Limpiar cartera</button></div></div></div>
   <div class="card" style="margin-top:18px"><h3>Categorías objetivo para cobertura de clientes</h3><div class="field"><label>Una categoría por línea</label><textarea id="categoriesText" class="textarea small-textarea">${escapeHtml(categoryTargets.join('\n'))}</textarea></div><p class="footnote">Estas categorías se usan para identificar faltantes por cliente. El producto ya viene clasificado automáticamente en el desglose.</p></div><div class="card" style="margin-top:18px"><h3>Estructura esperada para integraciones</h3><p class="footnote"><b>Visitas Excel/CSV:</b> fecha/day/date, vendedor/vendor/agent, cliente/client, tipo/type, ciudad/city, notas/notes, duracion_min o duration_sec.<br><b>Cartera vencida:</b> vendedor, cliente, saldo_vencido, dias_vencido, fecha.<br><b>Venta real:</b> ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.<br><b>Metas:</b> vendedor + meta_minima + meta_maxima.</p></div>`;
 }
 function persistConfigFromInputs(){
@@ -420,29 +440,56 @@ function persistConfigFromInputs(){
   document.querySelectorAll('.weight-input').forEach(i => settings.weights[i.dataset.key] = Number(i.value) || 0);
   document.querySelectorAll('.goal-input').forEach(i => settings.goals[i.dataset.key] = Number(i.value) || 0);
   if(scoreMode) settings.scoreMode = scoreMode.value;
-  document.querySelectorAll('.target-min-input').forEach(i => { salesTargets[i.dataset.agent] = salesTargets[i.dataset.agent] || {}; salesTargets[i.dataset.agent].min = Number(i.value) || null; });
-  document.querySelectorAll('.target-max-input').forEach(i => { salesTargets[i.dataset.agent] = salesTargets[i.dataset.agent] || {}; salesTargets[i.dataset.agent].max = Number(i.value) || null; });
-  document.querySelectorAll('.sales-input').forEach(i => { salesActuals[i.dataset.agent] = Number(i.value) || ''; });
+  document.querySelectorAll('.target-min-input').forEach(i => { salesTargets[i.dataset.agent] = salesTargets[i.dataset.agent] || {}; salesTargets[i.dataset.agent].min = cleanNumber(i.value) || null; });
+  document.querySelectorAll('.target-max-input').forEach(i => { salesTargets[i.dataset.agent] = salesTargets[i.dataset.agent] || {}; salesTargets[i.dataset.agent].max = cleanNumber(i.value) || null; });
+  document.querySelectorAll('.sales-input').forEach(i => { salesActuals[i.dataset.agent] = cleanNumber(i.value) || ''; });
   const cats = document.getElementById('categoriesText');
   if(cats) categoryTargets = cats.value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   saveJSON(LS.settings, settings); saveJSON(LS.targets, salesTargets); saveJSON(LS.sales, salesActuals); saveJSON(LS.categories, categoryTargets);
+  showSaved();
+}
+function showSaved(){
+  const el = document.getElementById('savedStatus');
+  if(!el) return;
+  el.textContent = 'Guardado';
+  el.classList.add('good');
+  clearTimeout(showSaved._t);
+  showSaved._t = setTimeout(() => { if(el){ el.textContent = 'Listo para editar'; el.classList.remove('good'); } }, 1200);
 }
 
 function readRowsFromFileInput(inputId, label, cb){
   const file = document.getElementById(inputId)?.files?.[0];
   if(!file) return alert(`Selecciona el archivo de ${label}.`);
-  if(/\.xlsx$/i.test(file.name)) return alert('Este importador lee CSV, TXT, JSON o .xls HTML. Guarda tu Excel como CSV o .xls y vuelve a cargarlo.');
   const reader = new FileReader();
+  const isExcel = /\.(xlsx|xls)$/i.test(file.name);
   reader.onload = () => {
     try{
-      const txt = String(reader.result || '');
-      const rows = (/^\s*</.test(txt) || /<table[\s>]/i.test(txt)) ? parseHTMLTable(txt) : parseAny(txt);
+      let rows = [];
+      if(isExcel && window.XLSX){
+        try{
+          const wb = XLSX.read(reader.result, { type:'array', cellDates:false });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const matrix = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, defval:'' });
+          rows = matrixToObjects(matrix);
+        }catch(excelErr){
+          const decoder = new TextDecoder('utf-8');
+          const txt = decoder.decode(reader.result);
+          rows = (/^\s*</.test(txt) || /<table[\s>]/i.test(txt)) ? parseHTMLTable(txt) : parseAny(txt);
+        }
+      }else if(isExcel && !window.XLSX){
+        alert('Para importar .xlsx/.xls abre la app con internet activo o guarda el archivo como CSV. El resto de la app sí funciona.');
+        return;
+      }else{
+        const txt = String(reader.result || '');
+        rows = (/^\s*</.test(txt) || /<table[\s>]/i.test(txt)) ? parseHTMLTable(txt) : parseAny(txt);
+      }
       cb(rows);
     }catch(e){ alert(`No se pudo importar ${label}: ` + e.message); }
   };
   reader.onerror = () => alert('No se pudo leer el archivo.');
-  reader.readAsText(file, 'utf-8');
+  if(isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file, 'utf-8');
 }
+
 
 function bindConfig(){
   const saveBtn = document.getElementById('saveConfig');
@@ -450,10 +497,11 @@ function bindConfig(){
   const resetBtn = document.getElementById('resetConfig');
   if(resetBtn) resetBtn.onclick = () => { settings = clone(DATA.defaults); salesTargets = clone(DATA.salesTargets || DATA.defaults.salesTargets || {}); categoryTargets = clone(DATA.categories || DATA.defaults.categories || []); saveJSON(LS.settings, settings); saveJSON(LS.targets, salesTargets); saveJSON(LS.categories, categoryTargets); render(); };
 
-  document.querySelectorAll('.weight-input,.goal-input,#periodMonth,#periodMonthName,#scoreMode,.target-min-input,.target-max-input,#categoriesText').forEach(el => {
-    el.onchange = () => { persistConfigFromInputs(); };
+  document.querySelectorAll('.weight-input,.goal-input,#periodMonth,#periodMonthName,#scoreMode,.target-min-input,.target-max-input,#categoriesText,.sales-input').forEach(el => {
+    const handler = () => { persistConfigFromInputs(); };
+    el.addEventListener('input', handler);
+    el.addEventListener('change', handler);
   });
-  document.querySelectorAll('.sales-input').forEach(inp => inp.onchange = () => { salesActuals[inp.dataset.agent] = Number(inp.value) || ''; saveJSON(LS.sales, salesActuals); render(); });
 
   const impTargets = document.getElementById('importTargets');
   if(impTargets) impTargets.onclick = () => { importTargetRows(parseAny(document.getElementById('targetsPaste').value)); };
@@ -606,12 +654,20 @@ function parseCSV(txt){
   const first = lines[0];
   const delimiter = (first.match(/\t/g) || []).length ? '\t' : ((first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ';' : ',');
   const parseLine = line => { const out = []; let cur = '', q = false; for(let i = 0; i < line.length; i++){ const ch = line[i]; if(ch === '"'){ if(q && line[i+1] === '"'){ cur += '"'; i++; } else q = !q; } else if(ch === delimiter && !q){ out.push(cur.trim()); cur = ''; } else cur += ch; } out.push(cur.trim()); return out; };
-  const rows = lines.map(parseLine);
-  const headers = rows[0].map(h => String(h).trim());
-  const hasHeader = headers.some(h => /vendedor|agent|vendor|cliente|fecha|venta|saldo|day|meta/i.test(h));
-  if(!hasHeader) return rows.map(r => Object.assign([...r], r));
-  return rows.slice(1).map(r => { const o = {}; headers.forEach((h, i) => o[h] = r[i] ?? ''); return o; });
+  return matrixToObjects(lines.map(parseLine));
 }
+function matrixToObjects(matrix){
+  matrix = (matrix || []).map(r => (r || []).map(c => String(c ?? '').trim())).filter(r => r.some(Boolean));
+  if(!matrix.length) return [];
+  const headerRegex = /vendedor|agent|vendor|cliente|fecha|venta|saldo|day|meta|almacen|almac[eé]n|giro|codigo|c[oó]digo|subtotal/i;
+  let headerIndex = matrix.findIndex(row => row.some(c => headerRegex.test(c)) && row.filter(Boolean).length >= 2);
+  if(headerIndex < 0) headerIndex = 0;
+  const headers = matrix[headerIndex].map((h, i) => h || String(i));
+  const hasHeader = headers.some(h => headerRegex.test(h));
+  if(!hasHeader) return matrix.map(r => Object.assign([...r], r));
+  return matrix.slice(headerIndex + 1).filter(r => r.some(Boolean)).map(r => { const o = {}; headers.forEach((h, i) => o[h] = r[i] ?? ''); return o; });
+}
+
 function exportCSV(rows, filename){
   if(!rows || !rows.length){ alert('No hay filas para exportar en esta hoja.'); return; }
   const keys = Object.keys(rows[0]).filter(k => !(rows[0][k] instanceof Set));
