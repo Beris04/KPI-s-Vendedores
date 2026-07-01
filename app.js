@@ -1,12 +1,13 @@
 const DATA = window.APP_DATA;
 const LS = {
-  sales: 'ranking_sales_actuals_v7',
-  visits: 'ranking_visits_v7',
-  overdue: 'ranking_overdue_v7',
-  settings: 'ranking_settings_v7',
-  targets: 'ranking_sales_targets_v7',
-  categories: 'ranking_categories_v7',
-  recovery: 'ranking_recovery_import_v7'
+  sales: 'ranking_sales_actuals_v8',
+  visits: 'ranking_visits_v8',
+  overdue: 'ranking_overdue_v8',
+  settings: 'ranking_settings_v8',
+  targets: 'ranking_sales_targets_v8',
+  categories: 'ranking_categories_v8',
+  recovery: 'ranking_recovery_import_v8',
+  giro: 'ranking_giro_import_v8'
 };
 
 const TABS = [
@@ -34,6 +35,7 @@ let categoryTargets = loadJSON(LS.categories, DATA.categories || (DATA.defaults 
 let visits = loadJSON(LS.visits, DATA.visits || []);
 let overdue = loadJSON(LS.overdue, DATA.overdueBalances || []);
 let recoveryImport = loadJSON(LS.recovery, DATA.recoveryImported || []);
+let giroImport = loadJSON(LS.giro, DATA.giroImported || []);
 
 function clone(o){ return JSON.parse(JSON.stringify(o || {})); }
 function loadJSON(k, fallback){ try{ const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : clone(fallback); }catch(e){ return clone(fallback); } }
@@ -53,6 +55,7 @@ function activeMonth(){ return settings?.period?.month || DATA.meta.month; }
 function init(){
   visits = normalizeVisits(visits);
   if(!isNormalizedRecoveryRows(recoveryImport)) recoveryImport = normalizeRecoveryRows(recoveryImport); _recoveryCache = null;
+  giroImport = normalizeGiroRows(giroImport);
   renderNav();
   renderAgentFilter();
   renderQualityBanner();
@@ -75,7 +78,7 @@ function renderAgentFilter(){
 
 function renderQualityBanner(){
   const b = document.getElementById('qualityBanner');
-  b.innerHTML = `<strong>Notas de datos:</strong> ${DATA.meta.notes.map(escapeHtml).join(' · ')}<br><span class="small">Todas las cargas de archivos se hacen desde Configuración: ventas, metas, visitas, recuperación y cartera vencida. La app ya acepta Excel .xlsx/.xls y texto pegado desde Excel.</span>`;
+  b.innerHTML = `<strong>Notas de datos:</strong> ${DATA.meta.notes.map(escapeHtml).join(' · ')}<br><span class="small">Todas las cargas de archivos se hacen desde Configuración: ventas, metas, visitas, recuperación, giro/clientes y cartera vencida. La app ya acepta Excel .xlsx/.xls y texto pegado desde Excel.</span>`;
 }
 
 function render(){
@@ -183,6 +186,10 @@ function barList(rows, labelKey, valueKey){
 function barListMoney(rows, labelKey, valueKey){
   const max = Math.max(1, ...rows.map(r => Number(r[valueKey]) || 0));
   return `<div class="bar-list">${rows.map(r => `<div class="bar-row"><div class="bar-label" title="${escapeHtml(r[labelKey])}">${escapeHtml(r[labelKey])}</div><div class="bar-track"><div class="bar-fill" style="width:${(Number(r[valueKey]) || 0) / max * 100}%"></div></div><div class="num"><b>${money(r[valueKey])}</b></div></div>`).join('')}</div>`;
+}
+function barListPct(rows, labelKey, valueKey){
+  const max = Math.max(1, ...rows.map(r => Number(r[valueKey]) || 0));
+  return `<div class="bar-list">${rows.map(r => `<div class="bar-row"><div class="bar-label" title="${escapeHtml(r[labelKey])}">${escapeHtml(r[labelKey])}</div><div class="bar-track"><div class="bar-fill" style="width:${(Number(r[valueKey]) || 0) / max * 100}%"></div></div><div class="num"><b>${pct(r[valueKey])}</b></div></div>`).join('')}</div>`;
 }
 
 function buildRanking(){
@@ -390,6 +397,7 @@ function categoryForRecoveryProduct(product){
 function giroForClient(client){
   if(!giroForClient._map){
     const map = new Map();
+    (giroImport || []).forEach(r => { if(r.cliente && r.giro && !map.has(norm(r.cliente))) map.set(norm(r.cliente), r.giro); });
     (DATA.giroClients || []).forEach(r => { if(r.cliente && r.giro && !map.has(norm(r.cliente))) map.set(norm(r.cliente), r.giro); });
     (DATA.clientSummary || []).forEach(r => { if(r.client && r.giro && !map.has(norm(r.client))) map.set(norm(r.client), r.giro); });
     giroForClient._map = map;
@@ -511,44 +519,122 @@ function overdueScore(amount, agentCount = 1){ const allowed = (Number(settings.
 function overdueSummaryRows(){ return DATA.agents.filter(a => currentAgents().includes(a)).map(a => { const amount = overdueTotalForAgent(a); return { agent:a, amount, score:overdue.length ? overdueScore(amount, 1) : null }; }); }
 
 
+
+function monthNumberFromName(m){
+  const n = norm(m);
+  const map = { ENERO:'01', FEBRERO:'02', MARZO:'03', ABRIL:'04', MAYO:'05', JUNIO:'06', JULIO:'07', AGOSTO:'08', SEPTIEMBRE:'09', SETIEMBRE:'09', OCTUBRE:'10', NOVIEMBRE:'11', DICIEMBRE:'12' };
+  return map[n] || '';
+}
+function monthKeyFromParts(year, month, date){
+  const activeYear = String(activeMonth()).slice(0,4) || String(new Date().getFullYear());
+  if(date){
+    const s = String(date).trim();
+    const iso = s.match(/(20\d{2})[-\/](\d{1,2})[-\/]\d{1,2}/);
+    if(iso) return `${iso[1]}-${String(iso[2]).padStart(2,'0')}`;
+    const mx = s.match(/\d{1,2}[-\/](\d{1,2})[-\/](20\d{2})/);
+    if(mx) return `${mx[2]}-${String(mx[1]).padStart(2,'0')}`;
+  }
+  const y = String(year || '').match(/20\d{2}/)?.[0] || activeYear;
+  let mo = String(month || '').trim();
+  if(!mo) return '';
+  if(/^\d+$/.test(mo)) return `${y}-${String(Number(mo)).padStart(2,'0')}`;
+  const mn = monthNumberFromName(mo);
+  return mn ? `${y}-${mn}` : '';
+}
+function normalizeGiroRows(rows){
+  return (rows || []).map((r) => {
+    const codigo = pickField(r, ['CODIGO DE SN','CÓDIGO DE SN','codigo','código','Codigo','Código','CardCode','0']) || r[0] || '';
+    const cliente = pickField(r, ['CLIENTE','Cliente','cliente','NOMBRE_SN','Nombre SN','CardName','customer','1']) || r[1] || '';
+    const giro = pickField(r, ['GIRO','Giro','giro','segmento','Segmento','tipo cliente','Tipo cliente','2']) || r[2] || 'Sin giro';
+    const vendedorRaw = pickField(r, ['ALMACEN AGRUPADO','AGENTE_DE_VENTAS_CLIENTE','Vendedor','vendedor','AGENTE','agent','vendor']);
+    const agent = findAgent(vendedorRaw) || vendedorRaw || '';
+    const rawVenta = pickField(r, ["Suma de 'RVX_RENTABILIDAD'[SUBTOTAL]", 'Suma de SUBTOTAL', 'SUBTOTAL','Subtotal','subtotal','VENTA MES','Venta mes','Venta','venta','IMPORTE','Importe','importe','sales','monto','Monto','3']) || r[3] || 0;
+    const rawPct = pickField(r, ['Porcentaje del total general de Suma de \'RVX_RENTABILIDAD\'[SUBTOTAL]','Porcentaje','% total','pct','participacion','participación','4']) || r[4] || '';
+    const existingPeriod = pickField(r, ['period','Periodo','periodo']);
+    const year = pickField(r, ['Date - Año','Año','Anio','Year','year']);
+    const month = pickField(r, ['Date - Mes','Mes','Month','month']);
+    const date = pickField(r, ['Date','Fecha','fecha','date','Día','Dia','day']);
+    const period = existingPeriod || monthKeyFromParts(year, month, date) || activeMonth();
+    return { codigo:String(codigo || '').trim(), cliente:String(cliente || '').trim(), giro:String(giro || 'Sin giro').trim(), agent, subtotal:cleanNumber(rawVenta), pctRaw:cleanNumber(rawPct), period };
+  }).filter(r => (r.cliente || r.giro) && Number.isFinite(Number(r.subtotal)));
+}
+function giroPeriodRows(){
+  const rows = normalizeGiroRows(giroImport);
+  if(!rows.length) return [];
+  const active = activeMonth();
+  const activeRows = rows.filter(r => !r.period || r.period === active);
+  const periodRows = activeRows.length ? activeRows : rows.filter(r => r.period === latestGiroPeriod(rows));
+  return periodRows.filter(r => state.agent === '__ALL__' || !r.agent || matchAgent(r.agent, state.agent));
+}
+function latestGiroPeriod(rows){
+  const periods = Array.from(new Set((rows || []).map(r => r.period).filter(Boolean))).sort();
+  return periods[periods.length - 1] || activeMonth();
+}
+function giroActiveLabel(){
+  const rows = normalizeGiroRows(giroImport);
+  const activeRows = rows.filter(r => r.period === activeMonth());
+  const key = activeRows.length ? activeMonth() : latestGiroPeriod(rows);
+  if(!key) return activeMonthName();
+  const names = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const [y,m] = key.split('-');
+  return `${names[(Number(m)||1)-1]} ${y}`;
+}
 function giroMoneySummary(){
   const m = new Map();
-  for(const r of DATA.giroClients || []){
+  for(const r of giroPeriodRows()){
     const g = r.giro || 'Sin giro';
     if(!m.has(g)) m.set(g, { giro:g, clientsSet:new Set(), venta:0 });
     const o = m.get(g);
-    o.clientsSet.add(norm(r.cliente));
+    if(r.cliente) o.clientsSet.add(norm(r.cliente));
     o.venta += Number(r.subtotal) || 0;
   }
   const total = Array.from(m.values()).reduce((a,r) => a + r.venta, 0);
   return Array.from(m.values()).map(o => ({ giro:o.giro, clients:o.clientsSet.size, venta:o.venta, participacion: total ? o.venta / total * 100 : null })).sort((a,b) => b.venta - a.venta);
 }
-
+function giroClientRows(){
+  const total = giroPeriodRows().reduce((a, r) => a + (Number(r.subtotal) || 0), 0);
+  return giroPeriodRows().map(r => ({ ...r, participacion: total ? (Number(r.subtotal) || 0) / total * 100 : null })).sort((a,b) => (b.subtotal || 0) - (a.subtotal || 0));
+}
+function importGiroRows(rows){
+  giroImport = normalizeGiroRows(rows);
+  giroForClient._map = null;
+  saveJSON(LS.giro, giroImport);
+  const total = giroImport.reduce((a,r) => a + (Number(r.subtotal) || 0), 0);
+  alert(`Giro de clientes importado: ${giroImport.length} registros · Venta: ${money(total)}`);
+  render();
+}
 function giro(){
-  const qtyRows = DATA.giroByAgent.filter(r => currentAgents().includes(r.agent));
   const moneyRows = giroMoneySummary();
+  const clientRows = giroClientRows();
   state.currentRows = moneyRows;
+  const total = moneyRows.reduce((a,r) => a + (Number(r.venta) || 0), 0);
   const topMoney = moneyRows.slice(0, 12);
-  const topQty = [...qtyRows].sort((a, b) => (b.qtyMay || 0) - (a.qtyMay || 0)).slice(0, 12);
-  return `<div class="grid cols-2"><div class="card"><div class="section-title"><h3>Venta en dinero por giro</h3><span class="muted small">Participación total</span></div>${barListMoney(topMoney, 'giro', 'venta')}</div><div class="card"><div class="section-title"><h3>Participación por giro</h3><button class="btn secondary" data-action="export" data-export-key="giro" data-name="giro_clientes.csv">Exportar detalle</button></div>${renderTable(moneyRows, [['giro','Giro'],['clients','Clientes'],['venta','Venta $'],['participacion','Participación']], { scroll:true, formatters:{ venta:money, participacion:pct } })}</div></div><div class="grid cols-2" style="margin-top:18px"><div class="card"><div class="section-title"><h3>Venta por giro en cantidades</h3><span class="muted small">${activeMonthName()}</span></div>${barList(topQty, 'giro', 'qtyMay')}</div><div class="card"><h3>Clientes por giro y vendedor</h3>${renderTable(DATA.clientSummary.filter(r => currentAgents().includes(r.agent)), [['agent','Vendedor'],['client','Cliente'],['giro','Giro'],['qtyMay','Cantidad histórica'],['productsMay','Productos históricos']], { limit:500, scroll:true })}</div></div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Archivo giro de clientes</h3><span class="pill info">Venta y participación por cliente</span></div>${renderSearchBlock('Buscar cliente/giro')}${renderTable(DATA.giroClients, [['codigo','Código'],['cliente','Cliente'],['giro','Giro'],['subtotal','Venta $'],['pct','% total']], { limit:1000, scroll:true, formatters:{ subtotal:money, pct:v => pct(Number(v) * 100) } })}</div>`;
+  const topPct = moneyRows.slice(0, 12);
+  if(!giroImport.length){
+    return `<div class="card"><h3>Giro de clientes · ${activeMonthName()}</h3><p class="footnote">Para mostrar la venta en dinero y participación por giro de ${activeMonthName()}, carga desde <b>Configuración &gt; Giro clientes / venta por giro</b> el archivo del mes. Debe traer, como mínimo: <b>Cliente</b>, <b>Giro</b> y <b>Subtotal/Venta</b>. Si trae vendedor, también se podrá filtrar por vendedor.</p></div>`;
+  }
+  return `<div class="grid cols-3">
+    ${kpiCard('Venta giro', money(total), `Periodo mostrado: ${giroActiveLabel()}`, null)}
+    ${kpiCard('Giros activos', fmt(moneyRows.length), `${fmt(clientRows.length)} clientes/registros`, null)}
+    ${kpiCard('Giro líder', moneyRows[0] ? escapeHtml(moneyRows[0].giro) : 'Pend.', moneyRows[0] ? `${money(moneyRows[0].venta)} · ${pct(moneyRows[0].participacion)}` : 'Sin datos', null)}
+  </div>
+  <div class="grid cols-2" style="margin-top:18px"><div class="card"><div class="section-title"><h3>Venta en dinero por giro · ${giroActiveLabel()}</h3><span class="muted small">Primeras gráficas = último mes cargado</span></div>${barListMoney(topMoney, 'giro', 'venta')}</div><div class="card"><div class="section-title"><h3>Participación % por giro · ${giroActiveLabel()}</h3><button class="btn secondary" data-action="export" data-export-key="giro" data-name="giro_clientes_${activeMonth()}.csv">Exportar detalle</button></div>${barListPct(topPct, 'giro', 'participacion')}</div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Resumen por giro</h3><span class="pill info">Venta $ + participación</span></div>${renderTable(moneyRows, [['giro','Giro'],['clients','Clientes'],['venta','Venta $'],['participacion','Participación']], { scroll:true, formatters:{ venta:money, participacion:pct } })}</div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Detalle por cliente</h3><span class="pill info">Alimentado desde Configuración</span></div>${renderSearchBlock('Buscar cliente/giro/vendedor')}${renderTable(clientRows, [['agent','Vendedor'],['codigo','Código'],['cliente','Cliente'],['giro','Giro'],['subtotal','Venta $'],['participacion','% total']], { limit:1500, scroll:true, formatters:{ subtotal:money, participacion:pct } })}</div>`;
 }
 
 function config(){
   const w = settings.weights, g = settings.goals;
   const targetRows = DATA.agents.map(agent => ({ agent, min:targetMin(agent) || '' }));
   const salesRows = DATA.agents.map(agent => ({ agent, actual:salesActuals[agent] || '' }));
-  return `<div class="grid cols-2"><div class="card"><h3>Periodo activo</h3><div class="config-grid"><div class="field"><label>Mes</label><input id="periodMonth" type="month" value="${escapeHtml(activeMonth())}"></div><div class="field"><label>Nombre para reportes</label><input id="periodMonthName" type="text" value="${escapeHtml(activeMonthName())}" placeholder="Junio 2026"></div></div><p class="footnote">Al cambiar el periodo, se mantiene el mismo diseño. Sólo actualizas metas, ventas, visitas, recuperación y cartera desde esta sección.</p><span id="savedStatus" class="pill info">Listo para editar</span></div><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div></div>
-  <div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer junio</button></div><div class="card"><h3>Cargas de archivos del mes</h3><p class="footnote">Desde aquí se alimentan todas las hojas para que las páginas queden limpias.</p><div class="grid cols-2"><div class="field"><label>Ventas del mes</label><input id="salesConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Visitas del mes</label><input id="visitsConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Recuperación de categorías</label><input id="recoveryConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div></div><div style="margin-top:10px"><button class="btn" id="importSalesConfigFile">Importar ventas</button> <button class="btn" id="importVisitsConfigFile">Importar visitas</button> <button class="btn" id="importRecoveryConfigFile">Importar recuperación</button> <button class="btn secondary" id="clearVisitsConfig">Limpiar visitas</button></div><p class="footnote">Acepta Excel .xlsx/.xls, CSV, TXT, JSON y archivos .xls exportados como tabla HTML.</p></div></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · ${activeMonthName()}</h3><span class="pill info">Sólo meta mínima</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${row.min}" placeholder="Meta mínima" />` } })}<div class="form-row"><div class="field"><label>Archivo de metas</label><input id="targetsFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor	meta_minima
-GDL6 - DANIEL  AGUILAR	5227475.61"></textarea></div><div><button class="btn" id="importTargetsFile">Importar metas</button><br><button class="btn secondary" id="importTargets" style="margin-top:8px">Importar texto</button></div></div><p class="footnote">Al cambiar cualquier meta se guarda en este navegador y se refleja en Meta de Ventas y Ranking.</p></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Venta real del mes por vendedor</h3><span class="pill info">Editable o importable</span></div>${renderTable(salesRows, [['agent','Vendedor'],['salesInput','Venta real']], { scroll:true, formatters:{ salesInput:(v,row) => `<input class="sales-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${salesActuals[row.agent] || ''}" placeholder="Venta $" />` } })}<div class="form-row"><div class="field"><label>Pegar ventas desde Excel</label><textarea id="salesPaste" class="textarea" placeholder="ALMACEN AGRUPADO	VENTA MES
-GDL6 - DANIEL  AGUILAR	5209577"></textarea></div><div class="field"><label>Formato</label><p class="footnote">Columnas aceptadas: ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.</p></div><div><button class="btn secondary" id="importSalesConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearSalesConfig" style="margin-top:8px">Limpiar ventas</button></div></div></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Recuperación de categorías</h3><span class="pill info">${fmt(recoveryImport.length)} registros cargados</span></div><div class="form-row"><div class="field"><label>Pegar recuperación desde Excel</label><textarea id="recoveryPaste" class="textarea" placeholder="AGENTE_DE_VENTAS_CLIENTE	NOMBRE_SN	DESCRIPCION_PRODUCTO	Suma de CANTIDAD
-GDL6 - DANIEL  AGUILAR	CLIENTE ABC	PRODUCTO ABC	12"></textarea></div><div class="field"><label>Formato</label><p class="footnote">Columnas aceptadas: vendedor, cliente, descripción de producto y piezas/cantidad. La categoría se asigna automática por producto.</p></div><div><button class="btn secondary" id="importRecoveryConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearRecoveryConfig" style="margin-top:8px">Limpiar recuperación</button></div></div></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Cartera vencida</h3><span class="pill info">Formato vendedor + saldo</span></div><div class="form-row"><div class="field"><label>Archivo cartera</label><input id="overdueConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar cartera desde Excel</label><textarea id="overduePaste" class="textarea" placeholder="Vendedor	Saldo
-OFICINA GDL	502,115.55
-GDL3 - MARICELA REYNOSO	26,646.91"></textarea></div><div><button class="btn" id="importOverdueConfigFile">Importar archivo</button><br><button class="btn secondary" id="importOverdueConfigPaste" style="margin-top:8px">Importar texto</button><br><button class="btn secondary" id="clearOverdueConfig" style="margin-top:8px">Limpiar cartera</button></div></div></div>
-  <div class="card" style="margin-top:18px"><h3>Categorías objetivo para cobertura de clientes</h3><div class="field"><label>Una categoría por línea</label><textarea id="categoriesText" class="textarea small-textarea">${escapeHtml(categoryTargets.join('\n'))}</textarea></div><p class="footnote">Estas categorías se usan para identificar faltantes por cliente. El producto ya viene clasificado automáticamente en el desglose.</p></div><div class="card" style="margin-top:18px"><h3>Estructura esperada para integraciones</h3><p class="footnote"><b>Visitas Excel/CSV:</b> fecha/day/date, vendedor/vendor/agent, cliente/client, tipo/type, ciudad/city, notas/notes, duracion_min o duration_sec.<br><b>Cartera vencida:</b> Vendedor + Saldo.<br><b>Venta real:</b> ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.<br><b>Metas:</b> vendedor + meta_minima.<br><b>Recuperación:</b> vendedor + cliente + descripción de producto + piezas/cantidad.</p></div>`;
+  return `<div class="grid cols-2"><div class="card"><h3>Periodo activo</h3><div class="config-grid"><div class="field"><label>Mes</label><input id="periodMonth" type="month" value="${escapeHtml(activeMonth())}"></div><div class="field"><label>Nombre para reportes</label><input id="periodMonthName" type="text" value="${escapeHtml(activeMonthName())}" placeholder="Junio 2026"></div></div><p class="footnote">Al cambiar el periodo, se mantiene el mismo diseño. Sólo actualizas metas, ventas, visitas, recuperación, giro y cartera desde esta sección.</p><span id="savedStatus" class="pill info">Listo para editar</span></div><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div></div>
+  <div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer junio</button></div><div class="card"><h3>Cargas de archivos del mes</h3><p class="footnote">Desde aquí se alimentan todas las hojas para que las páginas queden limpias.</p><div class="grid cols-2"><div class="field"><label>Ventas del mes</label><input id="salesConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Visitas del mes</label><input id="visitsConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Recuperación de categorías</label><input id="recoveryConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Giro clientes / venta por giro</label><input id="giroConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div></div><div style="margin-top:10px"><button class="btn" id="importSalesConfigFile">Importar ventas</button> <button class="btn" id="importVisitsConfigFile">Importar visitas</button> <button class="btn" id="importRecoveryConfigFile">Importar recuperación</button> <button class="btn" id="importGiroConfigFile">Importar giro</button> <button class="btn secondary" id="clearVisitsConfig">Limpiar visitas</button></div><p class="footnote">Acepta Excel .xlsx/.xls, CSV, TXT, JSON y archivos .xls exportados como tabla HTML.</p></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · ${activeMonthName()}</h3><span class="pill info">Sólo meta mínima</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${row.min}" placeholder="Meta mínima" />` } })}<div class="form-row"><div class="field"><label>Archivo de metas</label><input id="targetsFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor\tmeta_minima\nGDL6 - DANIEL  AGUILAR\t5227475.61"></textarea></div><div><button class="btn" id="importTargetsFile">Importar metas</button><br><button class="btn secondary" id="importTargets" style="margin-top:8px">Importar texto</button></div></div><p class="footnote">Al cambiar cualquier meta se guarda en este navegador y se refleja en Meta de Ventas y Ranking.</p></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Venta real del mes por vendedor</h3><span class="pill info">Editable o importable</span></div>${renderTable(salesRows, [['agent','Vendedor'],['salesInput','Venta real']], { scroll:true, formatters:{ salesInput:(v,row) => `<input class="sales-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${salesActuals[row.agent] || ''}" placeholder="Venta $" />` } })}<div class="form-row"><div class="field"><label>Pegar ventas desde Excel</label><textarea id="salesPaste" class="textarea" placeholder="ALMACEN AGRUPADO\tVENTA MES\nGDL6 - DANIEL  AGUILAR\t5209577"></textarea></div><div class="field"><label>Formato</label><p class="footnote">Columnas aceptadas: ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.</p></div><div><button class="btn secondary" id="importSalesConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearSalesConfig" style="margin-top:8px">Limpiar ventas</button></div></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Giro clientes / venta por giro</h3><span class="pill info">${fmt(giroImport.length)} registros cargados</span></div><div class="form-row"><div class="field"><label>Pegar giro desde Excel</label><textarea id="giroPaste" class="textarea" placeholder="CODIGO DE SN\tCLIENTE\tGIRO\tSUBTOTAL\nC000001\tCLIENTE ABC\tRestaurante\t15000"></textarea></div><div class="field"><label>Cómo alimenta Giro</label><p class="footnote">Carga el archivo del último mes, por ejemplo Junio, con Cliente + Giro + Subtotal/Venta. Si trae Vendedor, la sección también filtra por vendedor. Si no trae fechas, la app lo toma como el periodo activo.</p></div><div><button class="btn secondary" id="importGiroConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearGiroConfig" style="margin-top:8px">Limpiar giro</button></div></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Recuperación de categorías</h3><span class="pill info">${fmt(recoveryImport.length)} registros cargados</span></div><div class="form-row"><div class="field"><label>Pegar recuperación desde Excel</label><textarea id="recoveryPaste" class="textarea" placeholder="AGENTE_DE_VENTAS_CLIENTE\tNOMBRE_SN\tDESCRIPCION_PRODUCTO\tSuma de CANTIDAD\nGDL6 - DANIEL  AGUILAR\tCLIENTE ABC\tPRODUCTO ABC\t12"></textarea></div><div class="field"><label>Formato</label><p class="footnote">Columnas aceptadas: vendedor, cliente, descripción de producto y piezas/cantidad. La categoría se asigna automática por producto.</p></div><div><button class="btn secondary" id="importRecoveryConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearRecoveryConfig" style="margin-top:8px">Limpiar recuperación</button></div></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Cartera vencida</h3><span class="pill info">Formato vendedor + saldo</span></div><div class="form-row"><div class="field"><label>Archivo cartera</label><input id="overdueConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar cartera desde Excel</label><textarea id="overduePaste" class="textarea" placeholder="Vendedor\tSaldo\nOFICINA GDL\t502,115.55\nGDL3 - MARICELA REYNOSO\t26,646.91"></textarea></div><div><button class="btn" id="importOverdueConfigFile">Importar archivo</button><br><button class="btn secondary" id="importOverdueConfigPaste" style="margin-top:8px">Importar texto</button><br><button class="btn secondary" id="clearOverdueConfig" style="margin-top:8px">Limpiar cartera</button></div></div></div>
+  <div class="card" style="margin-top:18px"><h3>Categorías objetivo para cobertura de clientes</h3><div class="field"><label>Una categoría por línea</label><textarea id="categoriesText" class="textarea small-textarea">${escapeHtml(categoryTargets.join('\n'))}</textarea></div><p class="footnote">Estas categorías se usan para identificar faltantes por cliente. El producto ya viene clasificado automáticamente en el desglose.</p></div><div class="card" style="margin-top:18px"><h3>Estructura esperada para integraciones</h3><p class="footnote"><b>Giro clientes:</b> CODIGO DE SN, CLIENTE, GIRO, SUBTOTAL/VENTA y opcional Vendedor/Fecha/Mes.<br><b>Visitas Excel/CSV:</b> fecha/day/date, vendedor/vendor/agent, cliente/client, tipo/type, ciudad/city, notas/notes, duracion_min o duration_sec.<br><b>Cartera vencida:</b> Vendedor + Saldo.<br><b>Venta real:</b> ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.<br><b>Metas:</b> vendedor + meta_minima.<br><b>Recuperación:</b> vendedor + cliente + descripción de producto + piezas/cantidad.</p></div>`;
 }
 function persistConfigFromInputs(){
   settings.period = settings.period || {};
@@ -614,7 +700,7 @@ function bindConfig(){
   const saveBtn = document.getElementById('saveConfig');
   if(saveBtn) saveBtn.onclick = () => { persistConfigFromInputs(); render(); };
   const resetBtn = document.getElementById('resetConfig');
-  if(resetBtn) resetBtn.onclick = () => { settings = clone(DATA.defaults); salesTargets = clone(DATA.salesTargets || DATA.defaults.salesTargets || {}); categoryTargets = clone(DATA.categories || DATA.defaults.categories || []); recoveryImport = clone(DATA.recoveryImported || []); _recoveryCache = null; saveJSON(LS.settings, settings); saveJSON(LS.targets, salesTargets); saveJSON(LS.categories, categoryTargets); render(); };
+  if(resetBtn) resetBtn.onclick = () => { settings = clone(DATA.defaults); salesTargets = clone(DATA.salesTargets || DATA.defaults.salesTargets || {}); categoryTargets = clone(DATA.categories || DATA.defaults.categories || []); recoveryImport = clone(DATA.recoveryImported || []); giroImport = clone(DATA.giroImported || []); _recoveryCache = null; saveJSON(LS.settings, settings); saveJSON(LS.targets, salesTargets); saveJSON(LS.categories, categoryTargets); saveJSON(LS.giro, giroImport); render(); };
 
   document.querySelectorAll('.weight-input,.goal-input,#periodMonth,#periodMonthName,#scoreMode,.target-min-input,#categoriesText,.sales-input').forEach(el => {
     const handler = () => { persistConfigFromInputs(); };
@@ -645,6 +731,13 @@ function bindConfig(){
   if(impRecoveryFile) impRecoveryFile.onclick = () => readRowsFromFileInput('recoveryConfigFile', 'recuperación de categorías', importRecoveryRows);
   const clearRecovery = document.getElementById('clearRecoveryConfig');
   if(clearRecovery) clearRecovery.onclick = () => { if(confirm('¿Limpiar recuperación cargada?')){ recoveryImport = []; _recoveryCache = null; saveJSON(LS.recovery, recoveryImport); render(); } };
+
+  const impGiroPaste = document.getElementById('importGiroConfigPaste');
+  if(impGiroPaste) impGiroPaste.onclick = () => importGiroRows(parseAny(document.getElementById('giroPaste').value));
+  const impGiroFile = document.getElementById('importGiroConfigFile');
+  if(impGiroFile) impGiroFile.onclick = () => readRowsFromFileInput('giroConfigFile', 'giro clientes', importGiroRows);
+  const clearGiro = document.getElementById('clearGiroConfig');
+  if(clearGiro) clearGiro.onclick = () => { if(confirm('¿Limpiar giro de clientes cargado?')){ giroImport = []; giroForClient._map = null; saveJSON(LS.giro, giroImport); render(); } };
 
   const impOverduePaste = document.getElementById('importOverdueConfigPaste');
   if(impOverduePaste) impOverduePaste.onclick = () => importOverdueRows(parseAny(document.getElementById('overduePaste').value));
@@ -734,7 +827,7 @@ function rowsForExport(key){
   if(key === 'clientProducts') return byAgent(DATA.clientProductCategoryDetail);
   if(key === 'prospects') return byAgent(DATA.prospects);
   if(key === 'overdue') return overdue.filter(r => state.agent === '__ALL__' || matchAgent(r.agent, state.agent));
-  if(key === 'giro') return DATA.giroClients;
+  if(key === 'giro') return giroClientRows();
   return state.currentRows;
 }
 
