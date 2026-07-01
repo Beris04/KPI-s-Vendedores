@@ -1,11 +1,12 @@
 const DATA = window.APP_DATA;
 const LS = {
-  sales: 'ranking_sales_actuals_v6',
-  visits: 'ranking_visits_v6',
-  overdue: 'ranking_overdue_v6',
-  settings: 'ranking_settings_v6',
-  targets: 'ranking_sales_targets_v6',
-  categories: 'ranking_categories_v6'
+  sales: 'ranking_sales_actuals_v7',
+  visits: 'ranking_visits_v7',
+  overdue: 'ranking_overdue_v7',
+  settings: 'ranking_settings_v7',
+  targets: 'ranking_sales_targets_v7',
+  categories: 'ranking_categories_v7',
+  recovery: 'ranking_recovery_import_v7'
 };
 
 const TABS = [
@@ -31,11 +32,12 @@ let salesActuals = loadJSON(LS.sales, DATA.salesActuals || {});
 let salesTargets = loadJSON(LS.targets, DATA.salesTargets || (DATA.defaults || {}).salesTargets || {});
 let categoryTargets = loadJSON(LS.categories, DATA.categories || (DATA.defaults || {}).categories || []);
 let visits = loadJSON(LS.visits, DATA.visits || []);
-let overdue = loadJSON(LS.overdue, []);
+let overdue = loadJSON(LS.overdue, DATA.overdueBalances || []);
+let recoveryImport = loadJSON(LS.recovery, DATA.recoveryImported || []);
 
 function clone(o){ return JSON.parse(JSON.stringify(o || {})); }
 function loadJSON(k, fallback){ try{ const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : clone(fallback); }catch(e){ return clone(fallback); } }
-function saveJSON(k, v){ localStorage.setItem(k, JSON.stringify(v)); }
+function saveJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ console.warn('No se pudo guardar localmente', k, e); } }
 function fmt(n, dec = 0){ if(n === null || n === undefined || n === '') return 'Pend.'; return Number(n).toLocaleString('es-MX', { maximumFractionDigits: dec, minimumFractionDigits: dec }); }
 function money(n){ if(n === null || n === undefined || n === '') return 'Pend.'; return Number(n).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }); }
 function pct(n){ if(n === null || n === undefined || Number.isNaN(n)) return 'Pend.'; return `${fmt(n, 1)}%`; }
@@ -50,6 +52,7 @@ function activeMonth(){ return settings?.period?.month || DATA.meta.month; }
 
 function init(){
   visits = normalizeVisits(visits);
+  if(!isNormalizedRecoveryRows(recoveryImport)) recoveryImport = normalizeRecoveryRows(recoveryImport); _recoveryCache = null;
   renderNav();
   renderAgentFilter();
   renderQualityBanner();
@@ -72,7 +75,7 @@ function renderAgentFilter(){
 
 function renderQualityBanner(){
   const b = document.getElementById('qualityBanner');
-  b.innerHTML = `<strong>Notas de datos:</strong> ${DATA.meta.notes.map(escapeHtml).join(' · ')}<br><span class="small">Todas las cargas de archivos se hacen desde Configuración: ventas, metas, visitas y cartera vencida. La app ya acepta Excel .xlsx/.xls y texto pegado desde Excel.</span>`;
+  b.innerHTML = `<strong>Notas de datos:</strong> ${DATA.meta.notes.map(escapeHtml).join(' · ')}<br><span class="small">Todas las cargas de archivos se hacen desde Configuración: ventas, metas, visitas, recuperación y cartera vencida. La app ya acepta Excel .xlsx/.xls y texto pegado desde Excel.</span>`;
 }
 
 function render(){
@@ -123,17 +126,16 @@ function aggregateMetrics(){
   const total = {
     agents: rows.length,
     metaMin: agents.reduce((a, v) => a + targetMin(v), 0),
-    metaMax: agents.reduce((a, v) => a + targetMax(v), 0),
     qtyMay: sum(rows, 'qtyMay'),
     clientsMay: sum(rows, 'clientsMay'),
     productsMay: sum(rows, 'productsMay'),
-    recovered: sum(rows, 'recovered'),
-    lostPotential: sum(rows, 'lostPotential'),
+    recovered: recoveryStatsForAgents(agents).recovered,
+    lostPotential: recoveryImport.length ? 0 : sum(rows, 'lostPotential'),
     catalogIncrements: sum(rows, 'catalogIncrements'),
     newClients: sum(rows, 'newClients'),
-    qtyRecovered: sum(rows, 'qtyRecovered')
+    qtyRecovered: recoveryStatsForAgents(agents).qtyRecovered
   };
-  total.recoveryRate = (total.recovered + total.lostPotential) > 0 ? total.recovered / (total.recovered + total.lostPotential) * 100 : null;
+  total.recoveryRate = recoveryImport.length ? null : ((total.recovered + total.lostPotential) > 0 ? total.recovered / (total.recovered + total.lostPotential) * 100 : null);
   total.salesActual = agents.reduce((a, v) => a + (Number(salesActuals[v]) || 0), 0);
   total.salesProgress = total.metaMin ? total.salesActual / total.metaMin * 100 : null;
   total.visits = countVisitsForAgents(agents).count;
@@ -146,7 +148,7 @@ function aggregateMetrics(){
 function dashboard(){
   const a = aggregateMetrics();
   const rankingRows = buildRanking().slice(0, 5);
-  const chartRows = metricRows().sort((x, y) => (y.recovered || 0) - (x.recovered || 0)).slice(0, 8);
+  const chartRows = recoverySummaryRows().sort((x, y) => (y.qtyRecovered || 0) - (x.qtyRecovered || 0)).slice(0, 8);
   const coverage = buildCoverageRows();
   const complete = coverage.filter(r => r.missingCategories === '').length;
   const avgCoverage = coverage.length ? coverage.reduce((s, r) => s + Number(r.coveragePct || 0), 0) / coverage.length : 0;
@@ -154,23 +156,23 @@ function dashboard(){
   return `<div class="grid cols-4">
     ${kpiCard('Meta de Ventas', money(a.salesActual), `Meta mínima: ${money(a.metaMin)} · Avance: ${pct(a.salesProgress)}`, a.salesProgress)}
     ${kpiCard('Visitas a clientes', fmt(a.visits), `Meta mensual: ${fmt(settings.goals.monthlyVisits * a.agents)} visitas`, a.visitProgress)}
-    ${kpiCard('Recuperación', fmt(a.recovered), `${fmt(a.lostPotential)} productos pendientes · ${pct(a.recoveryRate)}`, a.recoveryRate)}
+    ${kpiCard('Recuperación', fmt(a.recovered), recoveryImport.length ? `${fmt(a.qtyRecovered)} piezas recuperadas` : `${fmt(a.lostPotential)} productos pendientes · ${pct(a.recoveryRate)}`, a.recoveryRate)}
     ${kpiCard('Cobertura catálogo', pct(avgCoverage), `${fmt(complete)} clientes con catálogo completo`, avgCoverage)}
   </div>
   <div class="grid cols-2" style="margin-top:18px">
     <div class="card"><div class="section-title"><h3>Top ranking disponible</h3><span class="pill info">${activeMonthName()}</span></div>${renderTable(rankingRows, [['rank','#'],['agent','Vendedor'],['score','Puntaje'],['salesScore','Ventas'],['visitScore','Visitas'],['recoveryScore','Recup.'],['catalogScore','Catálogo'],['prospectingScore','Prospectos'],['overdueScore','Cartera']], { limit: 5, formatters: scoreFormatters() })}</div>
-    <div class="card"><div class="section-title"><h3>Productos recuperados por vendedor</h3><span class="muted small">Top 8</span></div>${barList(chartRows, 'agent', 'recovered')}</div>
+    <div class="card"><div class="section-title"><h3>Productos recuperados por vendedor</h3><span class="muted small">Top 8</span></div>${barList(chartRows, 'agent', 'qtyRecovered')}</div>
   </div>
   <div class="grid cols-2" style="margin-top:18px">
     <div class="card"><h3>Alertas rápidas</h3>${alertsHtml()}</div>
-    <div class="card"><h3>Cómo se está midiendo</h3><p class="footnote"><b>Recuperación:</b> productos que se vendieron en Mayo, no se vendieron en Abril, pero sí tenían historial entre Enero-Marzo.<br><b>Incremento catálogo:</b> producto comprado en Mayo por un cliente que no lo tenía en Enero-Abril.<br><b>Prospección:</b> cliente con compra en Mayo y sin compra Enero-Abril.<br><b>Cartera vencida:</b> se captura/importa al día 5 de cada mes.</p></div>
+    <div class="card"><h3>Cómo se está midiendo</h3><p class="footnote"><b>Recuperación:</b> se alimenta con el archivo de Recuperación de Categorías: vendedor, cliente, producto y piezas.<br><b>Incremento catálogo:</b> producto comprado en Mayo por un cliente que no lo tenía en Enero-Abril.<br><b>Prospección:</b> cliente con compra en Mayo y sin compra Enero-Abril.<br><b>Cartera vencida:</b> se captura/importa al día 5 de cada mes.</p></div>
   </div>`;
 }
 
 function alertsHtml(){
   const missingMeta = DATA.agents.filter(a => !targetMin(a));
   const noSalesActual = DATA.agents.filter(a => targetMin(a) && !(Number(salesActuals[a]) > 0)).length;
-  return `<ul class="footnote"><li><b>${noSalesActual}</b> vendedores/rutas con meta pero sin venta real capturada en pesos.</li><li><b>${visits.length}</b> visitas cargadas actualmente desde Excel/local.</li><li><b>${overdue.length}</b> registros de cartera vencida cargados.</li><li><b>${missingMeta.length}</b> vendedores/rutas sin meta de venta: ${missingMeta.map(escapeHtml).join(', ') || 'ninguno'}.</li></ul>`;
+  return `<ul class="footnote"><li><b>${noSalesActual}</b> vendedores/rutas con meta pero sin venta real capturada en pesos.</li><li><b>${visits.length}</b> visitas cargadas actualmente desde Excel/local.</li><li><b>${overdue.length}</b> saldos de cartera vencida cargados.</li><li><b>${recoveryImport.length}</b> registros de recuperación cargados.</li><li><b>${missingMeta.length}</b> vendedores/rutas sin meta de venta: ${missingMeta.map(escapeHtml).join(', ') || 'ninguno'}.</li></ul>`;
 }
 
 function barList(rows, labelKey, valueKey){
@@ -191,14 +193,15 @@ function buildRanking(){
     const salesScore = minMeta ? clamp(salesActual / minMeta * 100) : null;
     const visitCount = countVisitsForAgents([agent]).count;
     const visitScore = visits.length ? clamp(visitCount / settings.goals.monthlyVisits * 100) : null;
-    const recoveryScore = m.recoveryRate;
+    const rstat = recoveryStatsForAgents([agent]);
+    const recoveryScore = recoveryImport.length ? null : m.recoveryRate;
     const catalogScore = settings.goals.catalogIncrements ? clamp((m.catalogIncrements || 0) / settings.goals.catalogIncrements * 100) : null;
     const prospectingScore = settings.goals.prospects ? clamp((m.newClients || 0) / settings.goals.prospects * 100) : null;
     const ov = overdueTotalForAgent(agent);
     const ovScore = overdue.length ? overdueScore(ov, 1) : null;
     const kp = { salesScore, visitScore, recoveryScore, catalogScore, prospectingScore, overdueScore: ovScore };
     const score = weightedScore(kp);
-    return { agent, score, salesScore, visitScore, recoveryScore, catalogScore, prospectingScore, overdueScore: ovScore, salesActual, metaMin: minMeta, visits: visitCount, recovered: m.recovered || 0, catalog: m.catalogIncrements || 0, prospects: m.newClients || 0, overdue: ov };
+    return { agent, score, salesScore, visitScore, recoveryScore, catalogScore, prospectingScore, overdueScore: ovScore, salesActual, metaMin: minMeta, visits: visitCount, recovered: recoveryImport.length ? rstat.recovered : (m.recovered || 0), catalog: m.catalogIncrements || 0, prospects: m.newClients || 0, overdue: ov };
   }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
@@ -227,23 +230,23 @@ function scoreFormatters(){ return { score: v => `<span class="pill ${statusClas
 function sales(){
   const rows = DATA.agents.filter(a => currentAgents().includes(a)).map(agent => {
     const m = metricForAgent(agent) || blankMetric(agent);
-    const min = targetMin(agent), max = targetMax(agent);
+    const min = targetMin(agent);
     const actualRaw = salesActuals[agent];
     const hasActual = actualRaw !== undefined && actualRaw !== null && actualRaw !== '';
     const actual = hasActual ? Number(actualRaw) : '';
-    return { agent, metaMin:min, metaMax:max, salesActual:actual, progress: min && hasActual ? actual / min * 100 : null, missing: min && hasActual ? Math.max(0, min - actual) : null, qtyMay:m.qtyMay || 0, clientsMay:m.clientsMay || 0 };
+    return { agent, metaMin:min, salesActual:actual, progress: min && hasActual ? actual / min * 100 : null, missing: min && hasActual ? Math.max(0, min - actual) : null, qtyMay:m.qtyMay || 0, clientsMay:m.clientsMay || 0 };
   });
   const totalActual = rows.reduce((a,r) => a + (Number(r.salesActual) || 0), 0);
   const totalMin = rows.reduce((a,r) => a + (Number(r.metaMin) || 0), 0);
-  const totalMax = rows.reduce((a,r) => a + (Number(r.metaMax) || 0), 0);
+  const totalMissing = Math.max(0, totalMin - totalActual);
   const totalProgress = totalMin ? totalActual / totalMin * 100 : null;
   state.currentRows = rows;
   return `<div class="grid cols-3">
     ${kpiCard('Venta real cargada', money(totalActual), `Meta mínima: ${money(totalMin)} · Avance: ${pct(totalProgress)}`, totalProgress)}
-    ${kpiCard('Meta máxima', money(totalMax), `Periodo activo: ${activeMonthName()}`, null)}
+    ${kpiCard('Faltante contra meta', money(totalMissing), `Periodo activo: ${activeMonthName()}`, null)}
     ${kpiCard('Vendedores/rutas', fmt(rows.length), `${rows.filter(r => Number(r.salesActual) > 0).length} con venta cargada`, null)}
   </div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Meta de ventas · ${activeMonthName()}</h3><span class="pill info">Carga en Configuración</span></div><p class="footnote">Para mantener limpio el formato, la venta real y las metas mensuales se importan o editan desde <b>Configuración</b>. Esta hoja queda sólo para revisar avance, faltante y porcentaje por vendedor/ruta.</p>${renderTable(rows, [['agent','Vendedor'],['metaMin','Meta mínima'],['metaMax','Meta máxima'],['salesActual','Venta real'],['progress','Avance'],['missing','Faltante'],['qtyMay','Cantidad histórica'],['clientsMay','Clientes históricos']], { scroll:true, formatters:{ metaMin:money, metaMax:money, salesActual:money, progress:pct, missing:money } })}</div>`;
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Meta de ventas · ${activeMonthName()}</h3><span class="pill info">Carga en Configuración</span></div><p class="footnote">Para mantener limpio el formato, la venta real y la meta mínima mensual se importan o editan desde <b>Configuración</b>. Esta hoja queda sólo para revisar avance, faltante y porcentaje por vendedor/ruta.</p>${renderTable(rows, [['agent','Vendedor'],['metaMin','Meta mínima'],['salesActual','Venta real'],['progress','Avance'],['missing','Faltante'],['qtyMay','Cantidad histórica'],['clientsMay','Clientes históricos']], { scroll:true, formatters:{ metaMin:money, salesActual:money, progress:pct, missing:money } })}</div>`;
 }
 function bindSales(){
   document.querySelectorAll('.sales-input').forEach(inp => inp.onchange = () => { salesActuals[inp.dataset.agent] = cleanNumber(inp.value) || ''; saveJSON(LS.sales, salesActuals); render(); });
@@ -356,15 +359,125 @@ function visitDateRange(rows){
   return dates.length ? { from:dates[0], to:dates[dates.length - 1] } : null;
 }
 
-function recovery(){
-  const rows = metricRows().map(m => ({ agent:m.agent, recovered:m.recovered || 0, recoveredClients:m.recoveredClients || 0, lostPotential:m.lostPotential || 0, lostClients:m.lostClients || 0, recoveryRate:m.recoveryRate, qtyRecovered:m.qtyRecovered || 0 }));
-  state.currentRows = rows;
-  const rec = sum(rows, 'recovered'), lost = sum(rows, 'lostPotential');
-  const rate = (rec + lost) ? rec / (rec + lost) * 100 : 0;
-  const recoveredRows = DATA.recoveredProducts.filter(r => currentAgents().includes(r.agent));
-  const lostRows = DATA.lostProducts.filter(r => currentAgents().includes(r.agent));
-  return `<div class="grid cols-3">${kpiCard('Productos recuperados', fmt(rec), `${fmt(sum(rows, 'recoveredClients'))} clientes`, null)}${kpiCard('Pendientes por recuperar', fmt(lost), `${fmt(sum(rows, 'lostClients'))} clientes con historial`, null)}${kpiCard('Tasa recuperación', pct(rate), 'Recuperados / potencial total', rate)}</div><div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Recuperados por categoría</h3>${renderTable(categorySummary(recoveredRows, 'qtyMay'), [['category','Categoría'],['items','Productos'],['clients','Clientes'],['qty','Cantidad']], { scroll:true })}</div><div class="card"><h3>Pendientes por recuperar por categoría</h3>${renderTable(categorySummary(lostRows, 'qtyPrior'), [['category','Categoría'],['items','Productos'],['clients','Clientes'],['qty','Cantidad historial']], { scroll:true })}</div></div><div class="card" style="margin-top:18px"><h3>Resumen por vendedor</h3>${renderTable(rows, [['agent','Vendedor'],['recovered','Productos recuperados'],['recoveredClients','Clientes'],['lostPotential','Pendientes'],['lostClients','Clientes pendientes'],['recoveryRate','% recuperación'],['qtyRecovered','Cantidad recuperada']], { scroll:true, formatters:{ recoveryRate:pct } })}</div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Detalle productos recuperados</h3><button class="btn secondary" data-action="export" data-export-key="recovered" data-name="recuperacion_productos.csv">Exportar</button></div>${renderSearchBlock('Buscar cliente/producto/categoría')}${renderTable(recoveredRows, [['agent','Vendedor'],['client','Cliente'],['giro','Giro'],['category','Categoría'],['product','Producto'],['qtyMay','Cantidad Mayo'],['lastMonth','Último mes antes de abril']], { limit:1000, scroll:true })}</div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Potencial pendiente por recuperar</h3><button class="btn secondary" data-action="export" data-export-key="lost" data-name="pendiente_recuperar.csv">Exportar</button></div>${renderTable(lostRows, [['agent','Vendedor'],['client','Cliente'],['giro','Giro'],['category','Categoría'],['product','Producto'],['qtyPrior','Cantidad historial'],['lastMonth','Último mes vendido']], { limit:1000, scroll:true })}</div>`;
+
+function categoryForRecoveryProduct(product){
+  const n = norm(product);
+  if(!categoryForRecoveryProduct._map){
+    const map = new Map();
+    (DATA.clientProductCategoryDetail || []).forEach(r => { if(r.product && r.category && !map.has(norm(r.product))) map.set(norm(r.product), r.category); });
+    (DATA.catalogIncrements || []).forEach(r => { if(r.product && r.category && !map.has(norm(r.product))) map.set(norm(r.product), r.category); });
+    (DATA.recoveredProducts || []).forEach(r => { if(r.product && r.category && !map.has(norm(r.product))) map.set(norm(r.product), r.category); });
+    categoryForRecoveryProduct._map = map;
+  }
+  const exact = categoryForRecoveryProduct._map.get(n);
+  if(exact) return exact;
+  const rules = [
+    ['Sake y Cervezas', ['SAKE','CERVEZA','BEER','SOJU','PLUM WINE','VINO','LICOR']],
+    ['Pescado y Marisco', ['SALMON','ATUN','TUNA','HAMACHI','ANGUILA','UNAGI','EBI','CAMARON','PULPO','TAKO','KANIKAMA','MARISCO','PESCADO','IKURA','TOBIKO','MASAGO','SABA']],
+    ['Algas / Nori', ['NORI','WAKAME','KOMBU','ALGAS','SEAWEED','HIJIKI']],
+    ['Salsas / Condimentos', ['SALSA','SOYA','SHOYU','MIRIN','VINAGRE','ACEITE','MISO','WASABI','JENGIBRE','CURRY','DASHI','MAYONESA','MAYO','ADEREZO','DRESSING','TERIYAKI','PONZU','CHILE','SRIRACHA','HONDASHI','FURIKAKE','OYSTER','HOISIN']],
+    ['Arroz / Granos', ['ARROZ','RICE','GOHAN','GRANO','FRIJOL','SESAMO','AJONJOLI']],
+    ['Fideos / Ramen / Udon', ['RAMEN','UDON','SOBA','NOODLE','FIDEO','PASTA','YAKISOBA','VERMICELLI']],
+    ['Congelados / Refrigerados', ['CONGEL','FROZEN','HELADO','MOCHI ICE','REFRIG','TOFU','GYOZA','EDAMAME','KIMCHI','DUMPLING','KAMABOKO','KARAAGE','TEMPURA']],
+    ['Dulces / Galletas / Botanas', ['DULCE','GALLET','BOTANA','CHOC','CANDY','COOKIE','SNACK','POCKY','LOTTE','KIT KAT','CARAMELO','GUMMY','CHIPS','CHOCO PIE','HELLO PANDA']],
+    ['Bebidas / Té / Café', ['MATCHA','CAFE','COFFEE','BEBIDA','DRINK','POCARI','JUGO','AGUA','SODA','CALPIS','RAMUNE',' TE ','TÉ']],
+    ['Harinas / Empanizadores', ['HARINA','PANKO','EMPANIZ','FLOUR','TEMPURA MIX']],
+    ['Empaque / Utensilios', ['BOLSA','CHAROLA','PALILLO','PALILLOS','VASO','TAPA','ENVASE','CAJA','UTENSILIO','PLATO','CONTENEDOR']]
+  ];
+  for(const [cat, words] of rules){ if(words.some(w => n.includes(w))) return cat; }
+  return 'Otros / Básicos';
 }
+function giroForClient(client){
+  if(!giroForClient._map){
+    const map = new Map();
+    (DATA.giroClients || []).forEach(r => { if(r.cliente && r.giro && !map.has(norm(r.cliente))) map.set(norm(r.cliente), r.giro); });
+    (DATA.clientSummary || []).forEach(r => { if(r.client && r.giro && !map.has(norm(r.client))) map.set(norm(r.client), r.giro); });
+    giroForClient._map = map;
+  }
+  return giroForClient._map.get(norm(client)) || 'Sin giro';
+}
+function isNormalizedRecoveryRows(rows){ return Array.isArray(rows) && (!rows.length || (rows[0].agent && rows[0].client && rows[0].product && rows[0].category && rows[0].qty !== undefined)); }
+function normalizeRecoveryRows(rows){
+  return aggregateRecoveryRows((rows || []).map(r => {
+    const vendedor = pickField(r, ['AGENTE_DE_VENTAS_CLIENTE','ALMACEN AGRUPADO','vendedor','Vendedor','agent','AGENTE','vendor','0']) || r[0];
+    const agent = findAgent(vendedor) || vendedor || '';
+    const client = pickField(r, ['NOMBRE_SN','cliente','Cliente','client','customer','CLIENTE','1']) || r[1] || '';
+    const product = pickField(r, ['DESCRIPCION_PRODUCTO','Descripción producto','Descripcion producto','descripcion','descripcion_producto','producto','Producto','product','2']) || r[2] || '';
+    const qty = cleanNumber(pickField(r, ['Suma de CANTIDAD','CANTIDAD','Cantidad','cantidad','piezas','Piezas','qty','quantity','3']) || r[3] || 0);
+    const category = pickField(r, ['categoria','Categoría','category']) || categoryForRecoveryProduct(product);
+    const giro = pickField(r, ['giro','Giro']) || giroForClient(client);
+    return { agent, client, giro, category, product, qty };
+  }).filter(r => r.agent && r.client && r.product && Number(r.qty) !== 0));
+}
+function aggregateRecoveryRows(rows){
+  const m = new Map();
+  for(const r of rows || []){
+    const agent = findAgent(r.agent) || r.agent;
+    const key = `${norm(agent)}||${norm(r.client)}||${norm(r.product)}||${norm(r.category)}`;
+    if(!m.has(key)) m.set(key, { agent, client:r.client, giro:r.giro || giroForClient(r.client), category:r.category || categoryForRecoveryProduct(r.product), product:r.product, qty:0 });
+    m.get(key).qty += Number(r.qty) || 0;
+  }
+  return Array.from(m.values()).sort((a,b) => norm(a.agent).localeCompare(norm(b.agent)) || norm(a.client).localeCompare(norm(b.client)) || norm(a.product).localeCompare(norm(b.product)));
+}
+let _recoveryCache = null;
+function recoverySourceRows(){
+  if(recoveryImport && recoveryImport.length) return recoveryImport;
+  return (DATA.recoveredProducts || []).map(r => ({ agent:r.agent, client:r.client, giro:r.giro, category:r.category, product:r.product, qty:Number(r.qtyMay || r.qty || 0) }));
+}
+function buildRecoveryCache(){
+  const source = recoverySourceRows();
+  if(_recoveryCache && _recoveryCache.source === source) return _recoveryCache;
+  const byAgent = new Map();
+  const validAgents = new Set(DATA.agents.map(a => norm(a)));
+  for(const raw of source){
+    const agent = findAgent(raw.agent) || raw.agent;
+    if(!validAgents.has(norm(agent))) continue;
+    const row = { ...raw, agent };
+    if(!byAgent.has(agent)) byAgent.set(agent, { rows:[], clients:new Set(), products:new Set(), categories:new Set(), qtyRecovered:0 });
+    const o = byAgent.get(agent);
+    o.rows.push(row);
+    o.clients.add(norm(row.client));
+    o.products.add(norm(row.product));
+    o.categories.add(norm(row.category));
+    o.qtyRecovered += Number(row.qty) || 0;
+  }
+  _recoveryCache = { source, byAgent };
+  return _recoveryCache;
+}
+function recoveryRowsForAgents(agents){
+  const byAgent = buildRecoveryCache().byAgent;
+  if(agents.length === DATA.agents.length) return Array.from(byAgent.values()).flatMap(v => v.rows);
+  return agents.flatMap(a => {
+    const direct = byAgent.get(a);
+    if(direct) return direct.rows;
+    const found = Array.from(byAgent.entries()).find(([agent]) => matchAgent(agent, a));
+    return found ? found[1].rows : [];
+  });
+}
+function recoveryStatsForAgents(agents){
+  const rows = recoveryRowsForAgents(agents);
+  return { recovered: rows.length, recoveredClients: new Set(rows.map(r => norm(r.client))).size, qtyRecovered: sum(rows, 'qty'), categories: new Set(rows.map(r => norm(r.category))).size, rows };
+}
+function recoverySummaryRows(){
+  const byAgent = buildRecoveryCache().byAgent;
+  return DATA.agents.filter(a => currentAgents().includes(a)).map(agent => {
+    const st = byAgent.get(agent) || { rows:[], clients:new Set(), categories:new Set(), qtyRecovered:0 };
+    return { agent, recovered:st.rows.length, recoveredClients:st.clients.size, qtyRecovered:st.qtyRecovered, categories:st.categories.size };
+  });
+}
+
+function recovery(){
+  const rows = recoverySummaryRows();
+  state.currentRows = rows;
+  const detailRows = recoveryRowsForAgents(currentAgents());
+  const rec = sum(rows, 'recovered');
+  const clients = sum(rows, 'recoveredClients');
+  const pieces = sum(rows, 'qtyRecovered');
+  return `<div class="grid cols-3">${kpiCard('Productos recuperados', fmt(rec), `${fmt(clients)} clientes`, null)}${kpiCard('Piezas recuperadas', fmt(pieces), `${fmt(detailRows.length)} registros producto/cliente`, null)}${kpiCard('Categorías detectadas', fmt(new Set(detailRows.map(r => norm(r.category))).size), recoveryImport.length ? 'Archivo Recuperación de Categorías' : 'Base histórica', null)}</div>
+  <div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Recuperación por categoría</h3>${renderTable(categorySummary(detailRows, 'qty'), [['category','Categoría'],['items','Productos/cliente'],['clients','Clientes'],['qty','Piezas']], { scroll:true })}</div><div class="card"><h3>Resumen por vendedor</h3>${renderTable(rows, [['agent','Vendedor'],['recovered','Productos/cliente'],['recoveredClients','Clientes'],['categories','Categorías'],['qtyRecovered','Piezas recuperadas']], { scroll:true })}</div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Detalle recuperación de categorías</h3><button class="btn secondary" data-action="export" data-export-key="recovered" data-name="recuperacion_categorias.csv">Exportar</button></div><p class="footnote">Esta hoja se alimenta con el archivo que contiene vendedor, cliente, descripción de producto y piezas. La categoría se asigna automáticamente por producto.</p>${renderSearchBlock('Buscar vendedor/cliente/producto/categoría')}${renderTable(detailRows, [['agent','Vendedor'],['client','Cliente'],['giro','Giro'],['category','Categoría'],['product','Producto'],['qty','Piezas']], { limit:1500, scroll:true })}</div>`;
+}
+
 
 function catalog(){
   const rows = metricRows().map(m => ({ agent:m.agent, catalogIncrements:m.catalogIncrements || 0, catalogClients:m.catalogClients || 0, qtyCatalog:m.qtyCatalog || 0, goal:settings.goals.catalogIncrements, progress: settings.goals.catalogIncrements ? (m.catalogIncrements || 0) / settings.goals.catalogIncrements * 100 : null }));
@@ -387,7 +500,7 @@ function overdueView(){
   const rows = overdueSummaryRows();
   state.currentRows = rows;
   const total = rows.reduce((a,r) => a + (Number(r.amount) || 0), 0);
-  return `<div class="grid cols-2"><div class="card"><h3>Cartera vencida</h3><p class="footnote">La cartera vencida se carga desde <b>Configuración</b>, preferentemente a partir del día 5 de cada mes. Meta por vendedor: cartera vencida máxima ${money(settings.goals.overdueMax)}.</p>${kpiCard('Saldo vencido cargado', money(total), `${fmt(overdue.length)} registros importados`, null)}</div><div class="card"><h3>Regla de KPI</h3><p class="footnote">Si el saldo vencido es menor o igual a la meta permitida, el KPI se considera 100%. Si supera la meta, el score baja proporcionalmente: meta / saldo vencido.</p></div></div><div class="card" style="margin-top:18px"><h3>Resumen por vendedor</h3>${renderTable(rows, [['agent','Vendedor'],['amount','Saldo vencido'],['clients','Clientes'],['score','KPI cartera']], { scroll:true, formatters:{ amount:money, score:pct } })}</div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Detalle cartera vencida</h3><button class="btn secondary" data-action="export" data-export-key="overdue" data-name="cartera_vencida.csv">Exportar</button></div>${renderTable(overdue.filter(r => state.agent === '__ALL__' || matchAgent(r.agent, state.agent)), [['agent','Vendedor'],['client','Cliente'],['amount','Saldo vencido'],['days','Días vencido'],['date','Fecha']], { scroll:true, formatters:{ amount:money } })}</div>`;
+  return `<div class="grid cols-2"><div class="card"><h3>Cartera vencida</h3><p class="footnote">La cartera vencida se carga desde <b>Configuración</b>, preferentemente a partir del día 5 de cada mes. El formato requerido es únicamente: <b>Vendedor</b> y <b>Saldo</b>.</p>${kpiCard('Saldo vencido cargado', money(total), `${fmt(overdue.length)} vendedores/rutas con saldo`, null)}</div><div class="card"><h3>Regla de KPI</h3><p class="footnote">Si el saldo vencido es menor o igual a la meta permitida, el KPI se considera 100%. Si supera la meta, el score baja proporcionalmente: meta / saldo vencido.</p></div></div><div class="card" style="margin-top:18px"><div class="section-title"><h3>Resumen cartera vencida por vendedor</h3><button class="btn secondary" data-action="export" data-export-key="overdue" data-name="cartera_vencida.csv">Exportar</button></div>${renderTable(rows, [['agent','Vendedor'],['amount','Saldo'],['score','KPI cartera']], { scroll:true, formatters:{ amount:money, score:pct } })}</div>`;
 }
 function bindOverdue(){
   const clr = document.getElementById('clearOverdue');
@@ -395,7 +508,8 @@ function bindOverdue(){
 }
 function overdueTotalForAgent(agent){ return overdue.filter(r => matchAgent(r.agent, agent)).reduce((a, r) => a + (Number(r.amount) || 0), 0); }
 function overdueScore(amount, agentCount = 1){ const allowed = (Number(settings.goals.overdueMax) || 0) * agentCount; if(amount <= allowed) return 100; return clamp(allowed / amount * 100); }
-function overdueSummaryRows(){ return DATA.agents.filter(a => currentAgents().includes(a)).map(a => { const rows = overdue.filter(r => matchAgent(r.agent, a)); const amount = sum(rows, 'amount'); return { agent:a, amount, clients:new Set(rows.map(r => norm(r.client))).size, score:overdue.length ? overdueScore(amount, 1) : null }; }); }
+function overdueSummaryRows(){ return DATA.agents.filter(a => currentAgents().includes(a)).map(a => { const amount = overdueTotalForAgent(a); return { agent:a, amount, score:overdue.length ? overdueScore(amount, 1) : null }; }); }
+
 
 function giroMoneySummary(){
   const m = new Map();
@@ -421,14 +535,20 @@ function giro(){
 
 function config(){
   const w = settings.weights, g = settings.goals;
-  const targetRows = DATA.agents.map(agent => ({ agent, min:targetMin(agent) || '', max:targetMax(agent) || '' }));
+  const targetRows = DATA.agents.map(agent => ({ agent, min:targetMin(agent) || '' }));
   const salesRows = DATA.agents.map(agent => ({ agent, actual:salesActuals[agent] || '' }));
-  return `<div class="grid cols-2"><div class="card"><h3>Periodo activo</h3><div class="config-grid"><div class="field"><label>Mes</label><input id="periodMonth" type="month" value="${escapeHtml(activeMonth())}"></div><div class="field"><label>Nombre para reportes</label><input id="periodMonthName" type="text" value="${escapeHtml(activeMonthName())}" placeholder="Junio 2026"></div></div><p class="footnote">Al cambiar el periodo, se mantiene el mismo diseño. Sólo actualizas metas, ventas, visitas y cartera desde esta sección.</p><span id="savedStatus" class="pill info">Listo para editar</span></div><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div></div>
-  <div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer junio</button></div><div class="card"><h3>Cargas de archivos del mes</h3><p class="footnote">Desde aquí se alimentan todas las hojas para que las páginas queden limpias: ventas, metas, visitas y cartera vencida.</p><div class="grid cols-2"><div class="field"><label>Ventas del mes</label><input id="salesConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Visitas del mes</label><input id="visitsConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div></div><div style="margin-top:10px"><button class="btn" id="importSalesConfigFile">Importar ventas</button> <button class="btn" id="importVisitsConfigFile">Importar visitas</button> <button class="btn secondary" id="clearVisitsConfig">Limpiar visitas</button></div><p class="footnote">Ahora acepta Excel .xlsx/.xls, CSV, TXT, JSON y archivos .xls exportados como tabla HTML.</p></div></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · ${activeMonthName()}</h3><span class="pill info">Se guarda automático</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima'],['targetMaxInput','Meta máxima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${row.min}" placeholder="Meta mínima" />`, targetMaxInput:(v,row) => `<input class="target-max-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${row.max}" placeholder="Meta máxima" />` } })}<div class="form-row"><div class="field"><label>Archivo de metas</label><input id="targetsFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor\tmeta_minima\tmeta_maxima\nGDL6 - DANIEL  AGUILAR\t5227475.61\t5750223.17"></textarea></div><div><button class="btn" id="importTargetsFile">Importar metas</button><br><button class="btn secondary" id="importTargets" style="margin-top:8px">Importar texto</button></div></div><p class="footnote">Al cambiar cualquier meta se guarda en este navegador y se refleja en Meta de Ventas y Ranking.</p></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Venta real del mes por vendedor</h3><span class="pill info">Editable o importable</span></div>${renderTable(salesRows, [['agent','Vendedor'],['salesInput','Venta real']], { scroll:true, formatters:{ salesInput:(v,row) => `<input class="sales-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${salesActuals[row.agent] || ''}" placeholder="Venta $" />` } })}<div class="form-row"><div class="field"><label>Pegar ventas desde Excel</label><textarea id="salesPaste" class="textarea" placeholder="ALMACEN AGRUPADO\tVENTA MES\nGDL6 - DANIEL  AGUILAR\t5209577"></textarea></div><div class="field"><label>Formato</label><p class="footnote">Columnas aceptadas: ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.</p></div><div><button class="btn secondary" id="importSalesConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearSalesConfig" style="margin-top:8px">Limpiar ventas</button></div></div></div>
-  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Cartera vencida</h3><span class="pill info">Cargar desde el día 5</span></div><div class="form-row"><div class="field"><label>Archivo cartera</label><input id="overdueConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar cartera CSV</label><textarea id="overduePaste" class="textarea" placeholder="vendedor,cliente,saldo_vencido,dias_vencido,fecha\nGDL6 - DANIEL  AGUILAR,Cliente ABC,4200,15,2026-06-05"></textarea></div><div><button class="btn" id="importOverdueConfigFile">Importar archivo</button><br><button class="btn secondary" id="importOverdueConfigPaste" style="margin-top:8px">Importar texto</button><br><button class="btn secondary" id="clearOverdueConfig" style="margin-top:8px">Limpiar cartera</button></div></div></div>
-  <div class="card" style="margin-top:18px"><h3>Categorías objetivo para cobertura de clientes</h3><div class="field"><label>Una categoría por línea</label><textarea id="categoriesText" class="textarea small-textarea">${escapeHtml(categoryTargets.join('\n'))}</textarea></div><p class="footnote">Estas categorías se usan para identificar faltantes por cliente. El producto ya viene clasificado automáticamente en el desglose.</p></div><div class="card" style="margin-top:18px"><h3>Estructura esperada para integraciones</h3><p class="footnote"><b>Visitas Excel/CSV:</b> fecha/day/date, vendedor/vendor/agent, cliente/client, tipo/type, ciudad/city, notas/notes, duracion_min o duration_sec.<br><b>Cartera vencida:</b> vendedor, cliente, saldo_vencido, dias_vencido, fecha.<br><b>Venta real:</b> ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.<br><b>Metas:</b> vendedor + meta_minima + meta_maxima.</p></div>`;
+  return `<div class="grid cols-2"><div class="card"><h3>Periodo activo</h3><div class="config-grid"><div class="field"><label>Mes</label><input id="periodMonth" type="month" value="${escapeHtml(activeMonth())}"></div><div class="field"><label>Nombre para reportes</label><input id="periodMonthName" type="text" value="${escapeHtml(activeMonthName())}" placeholder="Junio 2026"></div></div><p class="footnote">Al cambiar el periodo, se mantiene el mismo diseño. Sólo actualizas metas, ventas, visitas, recuperación y cartera desde esta sección.</p><span id="savedStatus" class="pill info">Listo para editar</span></div><div class="card"><h3>Pesos del ranking</h3><div class="config-grid">${Object.keys(w).map(k => `<div class="field"><label>${labelWeight(k)}</label><input class="weight-input" data-key="${k}" type="number" value="${w[k]}" min="0" max="100"></div>`).join('')}</div><p class="footnote">La suma recomendada es 100%. Total actual: <b>${fmt(Object.values(w).reduce((a, b) => a + Number(b || 0), 0))}%</b></p><div class="field"><label>Modo de puntaje</label><select id="scoreMode"><option value="available" ${settings.scoreMode === 'available' ? 'selected' : ''}>Sólo KPIs con datos disponibles</option><option value="strict" ${settings.scoreMode === 'strict' ? 'selected' : ''}>Ranking completo: pendientes cuentan como 0</option></select></div></div></div>
+  <div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Metas KPI</h3><div class="config-grid">${Object.keys(g).map(k => `<div class="field"><label>${labelGoal(k)}</label><input class="goal-input" data-key="${k}" type="number" value="${g[k]}" min="0"></div>`).join('')}</div><button class="btn" id="saveConfig" style="margin-top:14px">Guardar configuración</button> <button class="btn secondary" id="resetConfig" style="margin-top:14px">Restablecer junio</button></div><div class="card"><h3>Cargas de archivos del mes</h3><p class="footnote">Desde aquí se alimentan todas las hojas para que las páginas queden limpias.</p><div class="grid cols-2"><div class="field"><label>Ventas del mes</label><input id="salesConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Visitas del mes</label><input id="visitsConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Recuperación de categorías</label><input id="recoveryConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div></div><div style="margin-top:10px"><button class="btn" id="importSalesConfigFile">Importar ventas</button> <button class="btn" id="importVisitsConfigFile">Importar visitas</button> <button class="btn" id="importRecoveryConfigFile">Importar recuperación</button> <button class="btn secondary" id="clearVisitsConfig">Limpiar visitas</button></div><p class="footnote">Acepta Excel .xlsx/.xls, CSV, TXT, JSON y archivos .xls exportados como tabla HTML.</p></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Metas de venta por vendedor · ${activeMonthName()}</h3><span class="pill info">Sólo meta mínima</span></div>${renderTable(targetRows, [['agent','Vendedor'],['targetMinInput','Meta mínima']], { scroll:true, formatters:{ targetMinInput:(v,row) => `<input class="target-min-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${row.min}" placeholder="Meta mínima" />` } })}<div class="form-row"><div class="field"><label>Archivo de metas</label><input id="targetsFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar metas desde Excel</label><textarea id="targetsPaste" class="textarea" placeholder="vendedor	meta_minima
+GDL6 - DANIEL  AGUILAR	5227475.61"></textarea></div><div><button class="btn" id="importTargetsFile">Importar metas</button><br><button class="btn secondary" id="importTargets" style="margin-top:8px">Importar texto</button></div></div><p class="footnote">Al cambiar cualquier meta se guarda en este navegador y se refleja en Meta de Ventas y Ranking.</p></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Venta real del mes por vendedor</h3><span class="pill info">Editable o importable</span></div>${renderTable(salesRows, [['agent','Vendedor'],['salesInput','Venta real']], { scroll:true, formatters:{ salesInput:(v,row) => `<input class="sales-input" data-agent="${escapeHtml(row.agent)}" type="text" inputmode="decimal" value="${salesActuals[row.agent] || ''}" placeholder="Venta $" />` } })}<div class="form-row"><div class="field"><label>Pegar ventas desde Excel</label><textarea id="salesPaste" class="textarea" placeholder="ALMACEN AGRUPADO	VENTA MES
+GDL6 - DANIEL  AGUILAR	5209577"></textarea></div><div class="field"><label>Formato</label><p class="footnote">Columnas aceptadas: ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.</p></div><div><button class="btn secondary" id="importSalesConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearSalesConfig" style="margin-top:8px">Limpiar ventas</button></div></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Recuperación de categorías</h3><span class="pill info">${fmt(recoveryImport.length)} registros cargados</span></div><div class="form-row"><div class="field"><label>Pegar recuperación desde Excel</label><textarea id="recoveryPaste" class="textarea" placeholder="AGENTE_DE_VENTAS_CLIENTE	NOMBRE_SN	DESCRIPCION_PRODUCTO	Suma de CANTIDAD
+GDL6 - DANIEL  AGUILAR	CLIENTE ABC	PRODUCTO ABC	12"></textarea></div><div class="field"><label>Formato</label><p class="footnote">Columnas aceptadas: vendedor, cliente, descripción de producto y piezas/cantidad. La categoría se asigna automática por producto.</p></div><div><button class="btn secondary" id="importRecoveryConfigPaste">Importar texto</button><br><button class="btn secondary" id="clearRecoveryConfig" style="margin-top:8px">Limpiar recuperación</button></div></div></div>
+  <div class="card" style="margin-top:18px"><div class="section-title"><h3>Cartera vencida</h3><span class="pill info">Formato vendedor + saldo</span></div><div class="form-row"><div class="field"><label>Archivo cartera</label><input id="overdueConfigFile" type="file" accept=".xlsx,.xls,.html,.csv,.txt,.json" /></div><div class="field"><label>Pegar cartera desde Excel</label><textarea id="overduePaste" class="textarea" placeholder="Vendedor	Saldo
+OFICINA GDL	502,115.55
+GDL3 - MARICELA REYNOSO	26,646.91"></textarea></div><div><button class="btn" id="importOverdueConfigFile">Importar archivo</button><br><button class="btn secondary" id="importOverdueConfigPaste" style="margin-top:8px">Importar texto</button><br><button class="btn secondary" id="clearOverdueConfig" style="margin-top:8px">Limpiar cartera</button></div></div></div>
+  <div class="card" style="margin-top:18px"><h3>Categorías objetivo para cobertura de clientes</h3><div class="field"><label>Una categoría por línea</label><textarea id="categoriesText" class="textarea small-textarea">${escapeHtml(categoryTargets.join('\n'))}</textarea></div><p class="footnote">Estas categorías se usan para identificar faltantes por cliente. El producto ya viene clasificado automáticamente en el desglose.</p></div><div class="card" style="margin-top:18px"><h3>Estructura esperada para integraciones</h3><p class="footnote"><b>Visitas Excel/CSV:</b> fecha/day/date, vendedor/vendor/agent, cliente/client, tipo/type, ciudad/city, notas/notes, duracion_min o duration_sec.<br><b>Cartera vencida:</b> Vendedor + Saldo.<br><b>Venta real:</b> ALMACEN AGRUPADO + VENTA MES, o vendedor + venta.<br><b>Metas:</b> vendedor + meta_minima.<br><b>Recuperación:</b> vendedor + cliente + descripción de producto + piezas/cantidad.</p></div>`;
 }
 function persistConfigFromInputs(){
   settings.period = settings.period || {};
@@ -441,7 +561,6 @@ function persistConfigFromInputs(){
   document.querySelectorAll('.goal-input').forEach(i => settings.goals[i.dataset.key] = Number(i.value) || 0);
   if(scoreMode) settings.scoreMode = scoreMode.value;
   document.querySelectorAll('.target-min-input').forEach(i => { salesTargets[i.dataset.agent] = salesTargets[i.dataset.agent] || {}; salesTargets[i.dataset.agent].min = cleanNumber(i.value) || null; });
-  document.querySelectorAll('.target-max-input').forEach(i => { salesTargets[i.dataset.agent] = salesTargets[i.dataset.agent] || {}; salesTargets[i.dataset.agent].max = cleanNumber(i.value) || null; });
   document.querySelectorAll('.sales-input').forEach(i => { salesActuals[i.dataset.agent] = cleanNumber(i.value) || ''; });
   const cats = document.getElementById('categoriesText');
   if(cats) categoryTargets = cats.value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
@@ -495,9 +614,9 @@ function bindConfig(){
   const saveBtn = document.getElementById('saveConfig');
   if(saveBtn) saveBtn.onclick = () => { persistConfigFromInputs(); render(); };
   const resetBtn = document.getElementById('resetConfig');
-  if(resetBtn) resetBtn.onclick = () => { settings = clone(DATA.defaults); salesTargets = clone(DATA.salesTargets || DATA.defaults.salesTargets || {}); categoryTargets = clone(DATA.categories || DATA.defaults.categories || []); saveJSON(LS.settings, settings); saveJSON(LS.targets, salesTargets); saveJSON(LS.categories, categoryTargets); render(); };
+  if(resetBtn) resetBtn.onclick = () => { settings = clone(DATA.defaults); salesTargets = clone(DATA.salesTargets || DATA.defaults.salesTargets || {}); categoryTargets = clone(DATA.categories || DATA.defaults.categories || []); recoveryImport = clone(DATA.recoveryImported || []); _recoveryCache = null; saveJSON(LS.settings, settings); saveJSON(LS.targets, salesTargets); saveJSON(LS.categories, categoryTargets); render(); };
 
-  document.querySelectorAll('.weight-input,.goal-input,#periodMonth,#periodMonthName,#scoreMode,.target-min-input,.target-max-input,#categoriesText,.sales-input').forEach(el => {
+  document.querySelectorAll('.weight-input,.goal-input,#periodMonth,#periodMonthName,#scoreMode,.target-min-input,#categoriesText,.sales-input').forEach(el => {
     const handler = () => { persistConfigFromInputs(); };
     el.addEventListener('input', handler);
     el.addEventListener('change', handler);
@@ -520,6 +639,13 @@ function bindConfig(){
   const clearVisits = document.getElementById('clearVisitsConfig');
   if(clearVisits) clearVisits.onclick = () => { if(confirm('¿Limpiar visitas cargadas?')){ visits = []; saveJSON(LS.visits, visits); render(); } };
 
+  const impRecoveryPaste = document.getElementById('importRecoveryConfigPaste');
+  if(impRecoveryPaste) impRecoveryPaste.onclick = () => importRecoveryRows(parseAny(document.getElementById('recoveryPaste').value));
+  const impRecoveryFile = document.getElementById('importRecoveryConfigFile');
+  if(impRecoveryFile) impRecoveryFile.onclick = () => readRowsFromFileInput('recoveryConfigFile', 'recuperación de categorías', importRecoveryRows);
+  const clearRecovery = document.getElementById('clearRecoveryConfig');
+  if(clearRecovery) clearRecovery.onclick = () => { if(confirm('¿Limpiar recuperación cargada?')){ recoveryImport = []; _recoveryCache = null; saveJSON(LS.recovery, recoveryImport); render(); } };
+
   const impOverduePaste = document.getElementById('importOverdueConfigPaste');
   if(impOverduePaste) impOverduePaste.onclick = () => importOverdueRows(parseAny(document.getElementById('overduePaste').value));
   const impOverdueFile = document.getElementById('importOverdueConfigFile');
@@ -528,28 +654,36 @@ function bindConfig(){
   if(clearOverdue) clearOverdue.onclick = () => { if(confirm('¿Limpiar cartera vencida cargada?')){ overdue = []; saveJSON(LS.overdue, overdue); render(); } };
 }
 function importOverdueRows(rows){
-  overdue = (rows || []).map(r => {
-    const vendedor = pickField(r, ['vendedor','Vendedor','agent','AGENTE','vendor','0']) || r[0];
-    const agent = findAgent(vendedor) || vendedor || '';
-    const client = pickField(r, ['cliente','Cliente','client','customer','1']) || r[1] || '';
-    const amount = cleanNumber(pickField(r, ['saldo_vencido','Saldo vencido','amount','monto','saldo','2']) || r[2] || 0);
-    const days = Number(pickField(r, ['dias_vencido','Días vencido','days','dias','3']) || r[3] || 0);
-    const date = pickField(r, ['fecha','Fecha','date','4']) || r[4] || '';
-    return { agent, client, amount, days, date };
-  }).filter(r => r.agent && r.client);
+  const map = new Map();
+  let skipped = 0;
+  (rows || []).forEach(r => {
+    const vendedor = pickField(r, ['Vendedor','vendedor','agent','AGENTE','vendor','ALMACEN AGRUPADO','0']) || r[0];
+    const agent = findAgent(vendedor);
+    const rawAmount = pickField(r, ['Saldo','saldo','saldo_vencido','Saldo vencido','amount','monto','1']) || r[1] || 0;
+    const amount = cleanNumber(rawAmount);
+    if(agent){ map.set(agent, (map.get(agent) || 0) + amount); } else skipped++;
+  });
+  overdue = Array.from(map.entries()).map(([agent, amount]) => ({ agent, amount }));
   saveJSON(LS.overdue, overdue);
-  alert(`Cartera importada: ${overdue.length} registros`);
+  alert(`Cartera importada: ${overdue.length} vendedores/rutas${skipped ? ` · Registros no reconocidos: ${skipped}` : ''}`);
+  render();
+}
+
+function importRecoveryRows(rows){
+  recoveryImport = normalizeRecoveryRows(rows);
+  _recoveryCache = null;
+  saveJSON(LS.recovery, recoveryImport);
+  alert(`Recuperación importada: ${recoveryImport.length} registros producto/cliente`);
   render();
 }
 
 function importTargetRows(rows){
   let ok = 0, skipped = 0;
   (rows || []).forEach(r => {
-    const vendedor = pickField(r, ['vendedor','Vendedor','agent','AGENTE','ALMACEN AGRUPADO','0']) || r[0];
+    const vendedor = pickField(r, ['vendedor','Vendedor','agent','AGENTE','ALMACEN AGRUPADO','Etiquetas de fila','0']) || r[0];
     const min = pickField(r, ['meta_minima','META MÍNIMA','META MINIMA','min','Meta mínima','1']) || r[1];
-    const max = pickField(r, ['meta_maxima','META MÁXIMA','META MAXIMA','max','Meta máxima','2']) || r[2];
     const a = findAgent(vendedor);
-    if(a){ salesTargets[a] = salesTargets[a] || {}; salesTargets[a].min = cleanNumber(min) || null; salesTargets[a].max = cleanNumber(max) || null; ok++; } else skipped++;
+    if(a){ salesTargets[a] = salesTargets[a] || {}; salesTargets[a].min = cleanNumber(min) || null; delete salesTargets[a].max; ok++; } else skipped++;
   });
   saveJSON(LS.targets, salesTargets);
   alert(`Metas importadas: ${ok}${skipped ? ` · Registros no reconocidos: ${skipped}` : ''}`);
@@ -593,7 +727,7 @@ function rowsForExport(key){
   const agents = currentAgents();
   const byAgent = rows => rows.filter(r => !r.agent || agents.includes(r.agent));
   if(key === 'visits') return visitsForCurrentAgent();
-  if(key === 'recovered') return byAgent(DATA.recoveredProducts);
+  if(key === 'recovered') return recoveryRowsForAgents(agents);
   if(key === 'lost') return byAgent(DATA.lostProducts);
   if(key === 'catalog') return byAgent(DATA.catalogIncrements);
   if(key === 'coverage') return buildCoverageRows();
@@ -659,7 +793,7 @@ function parseCSV(txt){
 function matrixToObjects(matrix){
   matrix = (matrix || []).map(r => (r || []).map(c => String(c ?? '').trim())).filter(r => r.some(Boolean));
   if(!matrix.length) return [];
-  const headerRegex = /vendedor|agent|vendor|cliente|fecha|venta|saldo|day|meta|almacen|almac[eé]n|giro|codigo|c[oó]digo|subtotal/i;
+  const headerRegex = /vendedor|agente|agent|vendor|cliente|fecha|date|d[ií]a|venta|saldo|day|meta|almacen|almac[eé]n|giro|codigo|c[oó]digo|subtotal|descripci[oó]n|descripcion|producto|cantidad|piezas/i;
   let headerIndex = matrix.findIndex(row => row.some(c => headerRegex.test(c)) && row.filter(Boolean).length >= 2);
   if(headerIndex < 0) headerIndex = 0;
   const headers = matrix[headerIndex].map((h, i) => h || String(i));

@@ -1,18 +1,30 @@
-# Ranking Vendedores GDL App v6
+# Ranking Vendedores GDL App v7
 
-Cambios urgentes corregidos:
+Versión corregida para trabajar desde **Configuración**.
 
-- Todas las cargas se hacen desde Configuración.
-- Se aceptan archivos .xlsx, .xls, .csv, .txt y texto pegado desde Excel.
-- Las metas se guardan al escribir, aunque pegues números con $ o comas.
-- Eliminados GDL11- OSCAR MERCADO y GDL12- MIGUEL SEPULVEDA.
-- Metas de junio 2026 precargadas.
-- Giro de clientes incluye venta en dinero y porcentaje de participación por giro.
+## Cambios principales
 
-Para usar:
-1. Abre index.html.
-2. Entra a Configuración.
-3. Carga ventas, metas, visitas y cartera desde esa sección.
-4. Revisa Dashboard, Meta de Ventas, Visitas y Ranking.
+- **Metas de venta:** sólo se usa **Meta mínima**. Se eliminó la Meta máxima del formato visible.
+- **Cartera vencida:** el formato ahora es únicamente:
+  - `Vendedor`
+  - `Saldo`
+- **Recuperación de categorías:** se agregó carga desde Configuración para el archivo con:
+  - vendedor
+  - cliente
+  - descripción de producto
+  - piezas/cantidad
+- El archivo **Recuperacion de Categorias.xlsx** quedó precargado como base inicial y también se incluyó convertido en `recuperacion_categorias_precargada.csv`.
+- Las cargas de ventas, metas, visitas, recuperación y cartera se hacen desde **Configuración**.
 
-Nota: Para leer .xlsx/.xls se usa SheetJS desde CDN; si abres sin internet, usa CSV o copia/pega desde Excel.
+## Archivos ejemplo incluidos
+
+- `metas_junio_2026.csv`
+- `ventas_junio_plantilla.csv`
+- `estructura_visitas_ejemplo.csv`
+- `cartera_vencida_ejemplo.csv`
+- `recuperacion_categorias_ejemplo.csv`
+- `recuperacion_categorias_precargada.csv`
+
+## Uso
+
+Abrir `index.html` en el navegador. Para cambiar el mes, entrar a **Configuración**, actualizar el periodo y cargar los archivos del mes.
