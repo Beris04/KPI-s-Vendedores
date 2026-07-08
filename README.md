@@ -1,59 +1,45 @@
-# Ranking Vendedores GDL · Cascarón KPI v3
+# Ranking Vendedores GDL · Cascarón KPI v5
 
-## Flujo corregido
+Versión corregida para usar **los nombres oficiales de vendedor/ruta de venta** en todas las tablas.
 
-Esta versión deja el cascarón fijo y centraliza todas las cargas en **Configuración**.
+## Vendedores reconocidos
 
-### Archivo principal: DATA (1)
-El archivo `data (1).xlsx` alimenta automáticamente:
+La app sólo mostrará estos nombres en Dashboard, Meta de Ventas, Visitas, Categorías, Prospectos, Cartera y Giro:
 
-- Meta de Ventas: se usa sólo el mes activo para calcular **Venta real**.
-- Incremento y recuperación de categoría: mes activo vs meses anteriores.
-- Prospectos y recuperación de clientes: mes activo vs meses anteriores.
+- AGENTE CLAVE  GDL
+- GDL1 - OSCAR YEPEZ
+- GDL13 - SANDRA NAVARRO
+- GDL14- ARCENIO AGUIRRE
+- GDL15 - ALDO SIERRA
+- GDL3 - MARICELA REYNOSO
+- GDL4 - JULIO DE LA CRUZ
+- GDL5 - ALAN PEREZ
+- GDL6 - DANIEL  AGUILAR
+- GDL9 - ANTONIO V.
 
-Columnas esperadas:
-- AGENTE_DE_VENTAS_CLIENTE
-- NOMBRE_SN
-- DESCRIPCION_PRODUCTO
-- Suma de SUBTOTAL
-- Date - Año
-- Date - Mes
-- Date - Día
+## Visitas
 
-### Categorías
-El archivo `Categorias.xlsx` alimenta la relación producto → categoría.
+El archivo de visitas puede traer el nombre de persona. La app lo convierte automáticamente al nombre oficial del KPI:
 
-Columnas esperadas:
-- CODIGO DE PRODUCTO
-- DESCRIPCION DE PRODUCTO
-- Categoria
+- Sergio Garibay → AGENTE CLAVE  GDL
+- Oscar Yepez → GDL1 - OSCAR YEPEZ
+- Sandra Navarro → GDL13 - SANDRA NAVARRO
+- Arcenio Aguirre → GDL14- ARCENIO AGUIRRE
+- Aldo Sierra → GDL15 - ALDO SIERRA
+- Maricela Reynoso → GDL3 - MARICELA REYNOSO
+- Julio de la Cruz → GDL4 - JULIO DE LA CRUZ
+- Alan Perez → GDL5 - ALAN PEREZ
+- Daniel Aguilar → GDL6 - DANIEL  AGUILAR
+- Antonio → GDL9 - ANTONIO V.
 
-### Visitas
-El archivo `admin_visitas_filtros_YYYY-MM-DD_a_YYYY-MM-DD.xls` alimenta la sección Visitas.
+Si aparece una ruta, oficina, QIN, ALSEA, Verde Valle, Esmeralda Sánchez o cualquier desconocido, no se plasma en visitas.
 
-Sólo se consideran estos vendedores:
-- Sergio Garibay
-- Oscar Yepez
-- Sandra Navarro
-- Arcenio Aguirre
-- Aldo Sierra
-- Maricela Reynoso
-- Julio de la Cruz
-- Alan Perez
-- Daniel Aguilar
-- Antonio
+## Archivos de carga
 
-Se ignoran rutas, oficinas, QIN, ALSEA, Verde Valle, Esmeralda Sánchez y cualquier vendedor desconocido.
+Todo se carga desde Configuración:
 
-### Archivos incluidos
-En la carpeta `archivos_base` vienen CSV convertidos desde los archivos que compartiste:
-- ventas_data_1.csv
-- categorias.csv
-- visitas_junio_2026.csv
-- metas_junio_2026.csv
-
-Si abres la app desde GitHub Pages, puedes usar el botón **Cargar archivos incluidos del ZIP**.
-Si abres `index.html` directo en tu computadora, carga manualmente los CSV de `archivos_base` desde Configuración.
-
-## Exportación
-Cada tabla tiene botón **Exportar CSV**.
+1. DATA (1).xlsx: ventas, categorías, prospectos y recuperación de clientes.
+2. Categorias.xlsx: producto → categoría.
+3. admin_visitas_filtros_YYYY-MM-DD_a_YYYY-MM-DD.xls: visitas del mes.
+4. no cobrado: cartera vencida con Vendedor y Saldo.
+5. giro: cliente, giro, venta y vendedor.

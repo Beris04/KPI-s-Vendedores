@@ -1,52 +1,4 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Ranking Vendedores GDL · Cascarón KPI</title>
-<style>
-:root{
-  --bg:#eef4fb;--card:#ffffff;--ink:#102033;--muted:#61758d;--line:#d7e3f1;
-  --brand:#0b4a8b;--brand2:#0d6efd;--soft:#e7f1ff;--good:#0f8a55;--warn:#c98500;--bad:#c0392b;
-}
-*{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--ink);font-size:13px}
-header{background:linear-gradient(135deg,#052b57,#0b67b2);color:white;padding:16px 22px;position:sticky;top:0;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.14)}
-header h1{margin:0;font-size:20px;letter-spacing:.2px} header p{margin:5px 0 0;color:#dbeafe;font-size:12px}
-.app{display:grid;grid-template-columns:235px minmax(0,1fr);gap:16px;padding:16px;max-width:1800px;margin:0 auto}
-nav{position:sticky;top:84px;height:calc(100vh - 100px);overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;box-shadow:0 2px 10px rgba(10,30,60,.06)}
-.navbtn{display:block;width:100%;border:0;background:transparent;text-align:left;padding:11px 12px;border-radius:12px;color:#17324d;font-weight:700;cursor:pointer;margin:2px 0}.navbtn:hover{background:#f1f6fd}.navbtn.active{background:#0b4a8b;color:white}
-main{min-width:0}.section{display:none}.section.active{display:block}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(10,30,60,.05)}
-.card h2{margin:0 0 6px;font-size:18px;color:#0b3c78}.card h3{margin:0 0 8px;font-size:14px;color:#0b3c78}.hint{color:var(--muted);font-size:12px;line-height:1.35}.grid{display:grid;gap:12px}.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid4{grid-template-columns:repeat(4,minmax(0,1fr))}
-.kpi{background:linear-gradient(180deg,#fff,#f6f9fd);border:1px solid var(--line);border-radius:14px;padding:12px}.kpi .label{font-size:12px;color:var(--muted);font-weight:700}.kpi .val{font-size:20px;font-weight:900;margin-top:5px;color:#09294d}.kpi .sub{font-size:11px;color:var(--muted);margin-top:4px}
-.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 10px;background:#f7fbff;color:#17324d;font-weight:800;font-size:12px}
-button,.btn{border:1px solid #bcd0e7;background:#fff;color:#0b4a8b;border-radius:10px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:12px}button.primary{background:#0b4a8b;color:#fff;border-color:#0b4a8b}button.good{background:#0f8a55;color:#fff;border-color:#0f8a55}button.small{font-size:11px;padding:5px 8px;border-radius:8px}.danger{color:var(--bad)}
-input,select,textarea{border:1px solid #c7d7ea;border-radius:10px;padding:8px;background:#fff;color:#102033;font-size:12px}textarea{width:100%;min-height:74px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.filebox{border:1px dashed #9bb7d8;border-radius:12px;padding:10px;background:#f8fbff}.filebox strong{display:block;color:#0b3c78;margin-bottom:5px}.filebox .status{font-size:12px;color:var(--muted);margin-top:6px}.filebox.ok{border-color:#6fcf97;background:#f3fff8}.filebox.err{border-color:#e57373;background:#fff7f7}
-.tablewrap{width:100%;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff}.tablewrap.no-x{overflow-x:hidden} table{border-collapse:collapse;width:100%;font-size:12px} th,td{border-bottom:1px solid #edf2f7;padding:7px 8px;text-align:left;vertical-align:top} th{background:#eaf3ff;color:#0b3c78;font-size:11px;text-transform:uppercase;letter-spacing:.25px;position:sticky;top:0;z-index:1} tr:hover td{background:#fbfdff}.num{text-align:right;white-space:nowrap}.center{text-align:center}.nowrap{white-space:nowrap}.oktxt{color:var(--good);font-weight:800}.warntxt{color:var(--warn);font-weight:800}.badtxt{color:var(--bad);font-weight:800}.scroll-y{max-height:390px;overflow:auto}.dashboard-table{table-layout:fixed}.dashboard-table th,.dashboard-table td{font-size:11px;padding:6px 5px}.dashboard-table th:nth-child(1),.dashboard-table td:nth-child(1){width:128px}.dashboard-table th:not(:first-child),.dashboard-table td:not(:first-child){text-align:right}.bar{height:9px;background:#e3edf8;border-radius:20px;overflow:hidden;min-width:60px}.bar span{display:block;height:100%;background:linear-gradient(90deg,#0b67b2,#0f8a55)}.muted{color:var(--muted)}
-.toast{position:fixed;right:18px;bottom:18px;background:#09294d;color:#fff;padding:12px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.22);display:none;max-width:360px;z-index:100}.toast.show{display:block}.loading{display:inline-block;width:12px;height:12px;border:2px solid #dbeafe;border-top-color:#0b4a8b;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:950px){.app{grid-template-columns:1fr}nav{position:relative;top:auto;height:auto}.grid2,.grid3,.grid4{grid-template-columns:1fr}.dashboard-table{table-layout:auto}.tablewrap.no-x{overflow-x:auto}}
-</style>
-</head>
-<body>
-<header>
-  <h1>Ranking Vendedores GDL · Cascarón KPI</h1>
-  <p>Todo se alimenta desde Configuración. DATA alimenta Meta de Ventas, Categorías, Prospectos y Recuperación de Clientes.</p>
-</header>
-<div class="app">
-<nav id="nav"></nav>
-<main>
-  <section id="dashboard" class="section active"></section>
-  <section id="ventas" class="section"></section>
-  <section id="visitas" class="section"></section>
-  <section id="categorias" class="section"></section>
-  <section id="prospectos" class="section"></section>
-  <section id="cartera" class="section"></section>
-  <section id="giro" class="section"></section>
-  <section id="config" class="section"></section>
-</main>
-</div>
-<div id="toast" class="toast"></div>
-<script>
+
 'use strict';
 const fmtMoney = new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0});
 const fmtMoney2 = new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:2});
@@ -55,43 +7,30 @@ const fmtPct = new Intl.NumberFormat('es-MX',{style:'percent',maximumFractionDig
 const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const MONTH_NUM = Object.fromEntries(MONTHS.map((m,i)=>[m,i+1]));
 const SELLERS = [
-  {key:'AGENTE CLAVE  GDL', name:'AGENTE CLAVE  GDL', goal:8014515.66, visitGoal:100},
-  {key:'GDL1 - OSCAR YEPEZ', name:'GDL1 - OSCAR YEPEZ', goal:1573563.46, visitGoal:100},
-  {key:'GDL13 - SANDRA NAVARRO', name:'GDL13 - SANDRA NAVARRO', goal:4469997.89, visitGoal:100},
-  {key:'GDL14- ARCENIO AGUIRRE', name:'GDL14- ARCENIO AGUIRRE', goal:1091890.50, visitGoal:100},
-  {key:'GDL15 - ALDO SIERRA', name:'GDL15 - ALDO SIERRA', goal:965280.87, visitGoal:100},
-  {key:'GDL3 - MARICELA REYNOSO', name:'GDL3 - MARICELA REYNOSO', goal:1620839.60, visitGoal:100},
-  {key:'GDL4 - JULIO DE LA CRUZ', name:'GDL4 - JULIO DE LA CRUZ', goal:1082061.34, visitGoal:100},
-  {key:'GDL5 - ALAN PEREZ', name:'GDL5 - ALAN PEREZ', goal:2299895.26, visitGoal:100},
-  {key:'GDL6 - DANIEL  AGUILAR', name:'GDL6 - DANIEL  AGUILAR', goal:5227475.61, visitGoal:100},
-  {key:'GDL9 - ANTONIO V.', name:'GDL9 - ANTONIO V.', goal:1518589.33, visitGoal:100},
+  {key:'AGENTE CLAVE  GDL', name:'Sergio Garibay', goal:8014515.66, visitGoal:100},
+  {key:'GDL1 - OSCAR YEPEZ', name:'Oscar Yepez', goal:1573563.46, visitGoal:100},
+  {key:'GDL13 - SANDRA NAVARRO', name:'Sandra Navarro', goal:4469997.89, visitGoal:100},
+  {key:'GDL14- ARCENIO AGUIRRE', name:'Arcenio Aguirre', goal:1091890.50, visitGoal:100},
+  {key:'GDL15 - ALDO SIERRA', name:'Aldo Sierra', goal:965280.87, visitGoal:100},
+  {key:'GDL3 - MARICELA REYNOSO', name:'Maricela Reynoso', goal:1620839.60, visitGoal:100},
+  {key:'GDL4 - JULIO DE LA CRUZ', name:'Julio de la Cruz', goal:1082061.34, visitGoal:100},
+  {key:'GDL5 - ALAN PEREZ', name:'Alan Perez', goal:2299895.26, visitGoal:100},
+  {key:'GDL6 - DANIEL  AGUILAR', name:'Daniel Aguilar', goal:5227475.61, visitGoal:100},
+  {key:'GDL9 - ANTONIO V.', name:'Antonio', goal:1518589.33, visitGoal:100},
 ];
 const sellerByKey = new Map(SELLERS.map(s=>[normKey(s.key),s]));
 const sellerByName = new Map(SELLERS.map(s=>[normKey(s.name),s]));
 const VISIT_VENDOR_MAP = new Map([
-  // El Excel de visitas puede venir con nombre de persona. Aquí se traduce al nombre oficial del KPI.
-  ['SERGIO GARIBAY','AGENTE CLAVE  GDL'],
-  ['GARIBAY ORTIZ SERGIO JOEL','AGENTE CLAVE  GDL'],
-  ['OSCAR YEPEZ','GDL1 - OSCAR YEPEZ'],
-  ['YEPEZ MORA OSCAR ALBERTO','GDL1 - OSCAR YEPEZ'],
-  ['SANDRA NAVARRO','GDL13 - SANDRA NAVARRO'],
-  ['NAVARRO NAVARRO SANDRA','GDL13 - SANDRA NAVARRO'],
-  ['SANDRA NAVARRO NAVARRO','GDL13 - SANDRA NAVARRO'],
-  ['ARCENIO AGUIRRE','GDL14- ARCENIO AGUIRRE'],
-  ['AGUIRRE OJEDA ARCENIO','GDL14- ARCENIO AGUIRRE'],
-  ['ALDO SIERRA','GDL15 - ALDO SIERRA'],
-  ['SIERRA DE ANDA ALDO','GDL15 - ALDO SIERRA'],
-  ['MARICELA REYNOSO','GDL3 - MARICELA REYNOSO'],
-  ['REYNOSO AGUILAR MARICELA','GDL3 - MARICELA REYNOSO'],
-  ['JULIO DE LA CRUZ','GDL4 - JULIO DE LA CRUZ'],
-  ['DE LA CRUZ PONCE JULIO CESAR','GDL4 - JULIO DE LA CRUZ'],
-  ['ALAN PEREZ','GDL5 - ALAN PEREZ'],
-  ['PEREZ MAR ALAN ROBERTO','GDL5 - ALAN PEREZ'],
-  ['DANIEL AGUILAR','GDL6 - DANIEL  AGUILAR'],
-  ['AGUILAR NERI DANIEL','GDL6 - DANIEL  AGUILAR'],
-  ['ANTONIO','GDL9 - ANTONIO V.'],
-  ['ANTONIO V','GDL9 - ANTONIO V.'],
-  ['VELEZ CASTELLANOS ANTONIO','GDL9 - ANTONIO V.'],
+  ['GARIBAY ORTIZ SERGIO JOEL','Sergio Garibay'],
+  ['YEPEZ MORA OSCAR ALBERTO','Oscar Yepez'],
+  ['SANDRA NAVARRO NAVARRO','Sandra Navarro'],
+  ['AGUIRRE OJEDA ARCENIO','Arcenio Aguirre'],
+  ['SIERRA DE ANDA ALDO','Aldo Sierra'],
+  ['REYNOSO AGUILAR MARICELA','Maricela Reynoso'],
+  ['DE LA CRUZ PONCE JULIO CESAR','Julio de la Cruz'],
+  ['PEREZ MAR ALAN ROBERTO','Alan Perez'],
+  ['AGUILAR NERI DANIEL','Daniel Aguilar'],
+  ['VELEZ CASTELLANOS ANTONIO','Antonio'],
 ]);
 let state = {
   activeYear: 2026,
@@ -339,7 +278,7 @@ function renderDashboard(){
     <div class="grid grid4">
       <div class="kpi"><div class="label">Venta real mes</div><div class="val">${fmtMoney.format(sum(c.metasRows||[],r=>r.venta))}</div><div class="sub">Sólo vendedores reconocidos</div></div>
       <div class="kpi"><div class="label">Meta total</div><div class="val">${fmtMoney.format(sum(c.metasRows||[],r=>r.meta))}</div><div class="sub">Metas editables en Configuración</div></div>
-      <div class="kpi"><div class="label">Visitas mes</div><div class="val">${fmtNum.format(sum(c.visitsRows||[],r=>r.visits))}</div><div class="sub">Sólo vendedores autorizados con nombre oficial KPI</div></div>
+      <div class="kpi"><div class="label">Visitas mes</div><div class="val">${fmtNum.format(sum(c.visitsRows||[],r=>r.visits))}</div><div class="sub">Sólo vendedores autorizados</div></div>
       <div class="kpi"><div class="label">Clientes nuevos</div><div class="val">${fmtNum.format((c.newClients||[]).length)}</div><div class="sub">No aparecían en meses anteriores</div></div>
     </div>
     ${tableHTML('tbl_dashboard','Tabulador de ranking',rows,[
@@ -536,6 +475,3 @@ function parseZip(buf){
   }};
 }
 initNav(); computeAll(); renderAll();
-</script>
-</body>
-</html>
