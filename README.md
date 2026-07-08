@@ -1,35 +1,59 @@
-# Ranking Vendedores GDL · Cascarón KPI v2
+# Ranking Vendedores GDL · Cascarón KPI v3
 
-Estructura corregida para cargar todos los archivos desde **Configuración**.
+## Flujo corregido
 
-## Flujo mensual
+Esta versión deja el cascarón fijo y centraliza todas las cargas en **Configuración**.
 
-1. Abrir `index.html`.
-2. Entrar a **Configuración**.
-3. Seleccionar el **Periodo activo** del mes que se revisa.
-4. Cargar los Excel/CSV de cada KPI:
-   - **Metas:** columnas `Vendedor`, `Meta`.
-   - **Ventas histórico / actual:** archivo tipo `data(1).xlsx` con `AGENTE_DE_VENTAS_CLIENTE`, `NOMBRE_SN`, `DESCRIPCION_PRODUCTO`, `Suma de SUBTOTAL`, `Date - Año`, `Date - Mes`, `Date - Día`.
-   - **Categorías:** archivo `Categorias.xlsx` con `CODIGO DE PRODUCTO`, `DESCRIPCION DE PRODUCTO`, `Categoria`.
-   - **Visitas:** archivo mensual de visitas.
-   - **No cobrado:** columnas `Vendedor`, `Saldo`.
-   - **Giro:** columnas `Vendedor`, `Cliente`, `Giro`, `Venta`.
-5. Revisar las secciones y exportar cada tabla con el botón **CSV**.
+### Archivo principal: DATA (1)
+El archivo `data (1).xlsx` alimenta automáticamente:
 
-## Archivos incluidos
+- Meta de Ventas: se usa sólo el mes activo para calcular **Venta real**.
+- Incremento y recuperación de categoría: mes activo vs meses anteriores.
+- Prospectos y recuperación de clientes: mes activo vs meses anteriores.
 
-En la carpeta `archivos_base` dejé convertidos a CSV los archivos que compartiste:
+Columnas esperadas:
+- AGENTE_DE_VENTAS_CLIENTE
+- NOMBRE_SN
+- DESCRIPCION_PRODUCTO
+- Suma de SUBTOTAL
+- Date - Año
+- Date - Mes
+- Date - Día
 
-- `categorias.csv`
-- `ventas_data_1.csv`
+### Categorías
+El archivo `Categorias.xlsx` alimenta la relación producto → categoría.
 
-Si la app está publicada en GitHub Pages, el botón **Cargar CSV incluidos del ZIP** los carga automáticamente. Si abres el HTML directo desde la computadora, usa **Elegir archivo** y carga manualmente esos CSV.
+Columnas esperadas:
+- CODIGO DE PRODUCTO
+- DESCRIPCION DE PRODUCTO
+- Categoria
 
-## Cálculos principales
+### Visitas
+El archivo `admin_visitas_filtros_YYYY-MM-DD_a_YYYY-MM-DD.xls` alimenta la sección Visitas.
 
-- **Meta de Ventas:** usa sólo el periodo activo.
-- **Recuperación de Categoría:** detecta cliente + categoría con compra histórica, pero sin compra en el periodo activo. El dinero mostrado es oportunidad estimada con promedio histórico mensual.
-- **Colocación de Categoría:** detecta cliente + categoría que no tenía compra histórica y sí compra en el periodo activo.
-- **Prospectos:** clientes con compra en el periodo activo sin historial previo en el archivo de ventas.
-- **Clientes recuperados:** clientes con historial, sin compra en el mes anterior y con compra en el periodo activo.
-- **Cartera Vencida:** usa el archivo `no cobrado` con vendedor y deuda.
+Sólo se consideran estos vendedores:
+- Sergio Garibay
+- Oscar Yepez
+- Sandra Navarro
+- Arcenio Aguirre
+- Aldo Sierra
+- Maricela Reynoso
+- Julio de la Cruz
+- Alan Perez
+- Daniel Aguilar
+- Antonio
+
+Se ignoran rutas, oficinas, QIN, ALSEA, Verde Valle, Esmeralda Sánchez y cualquier vendedor desconocido.
+
+### Archivos incluidos
+En la carpeta `archivos_base` vienen CSV convertidos desde los archivos que compartiste:
+- ventas_data_1.csv
+- categorias.csv
+- visitas_junio_2026.csv
+- metas_junio_2026.csv
+
+Si abres la app desde GitHub Pages, puedes usar el botón **Cargar archivos incluidos del ZIP**.
+Si abres `index.html` directo en tu computadora, carga manualmente los CSV de `archivos_base` desde Configuración.
+
+## Exportación
+Cada tabla tiene botón **Exportar CSV**.
