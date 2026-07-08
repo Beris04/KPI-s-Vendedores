@@ -1,50 +1,100 @@
-# Ranking Vendedores GDL App v8
+# Ranking Vendedores GDL · Cascarón KPI
 
-## Cambios principales v8
+Esta versión está hecha desde cero para que el flujo sea simple:
 
-- La sección **Giro clientes** ahora se alimenta desde **Configuración**.
-- Las primeras gráficas de Giro muestran el **último mes cargado / periodo activo**, por ejemplo **Junio 2026**.
-- Giro muestra:
-  - venta en dinero por giro,
-  - porcentaje de participación por giro,
-  - resumen por giro,
-  - detalle por cliente,
-  - filtro por vendedor cuando el archivo trae vendedor.
-- En Configuración se agregó carga de archivo y texto para **Giro clientes / venta por giro**.
+1. Abrir `index.html`.
+2. Entrar a **Configuración**.
+3. Definir el periodo activo, por ejemplo `2026-06`.
+4. Cargar los Excel/CSV de cada KPI.
+5. Revisar cada sección y exportar cualquier tabla con el botón pequeño **Exportar CSV**.
 
-## Cómo alimentar Giro clientes
+## Archivos que alimentan la app
 
-Para que las gráficas de Giro salgan en dinero y participación, carga un archivo del mes filtrado, por ejemplo junio. El archivo debe traer como mínimo:
+### 1. Metas
+Archivo sugerido: `metas`
 
-- CLIENTE
-- GIRO
-- SUBTOTAL, VENTA o IMPORTE
+Columnas mínimas:
 
-Opcionalmente puede traer:
+- `Vendedor`
+- `Meta`
 
-- CODIGO DE SN
-- Vendedor / ALMACEN AGRUPADO / AGENTE_DE_VENTAS_CLIENTE
-- Fecha / Mes / Año
+Sólo se usa meta mínima. Ya no se maneja meta máxima.
 
-Si el archivo no trae fecha o mes, la app lo tomará como el **periodo activo** seleccionado en Configuración.
+### 2. Ventas
+Archivo sugerido: `ventas`
 
-## Archivos de ejemplo incluidos
+Columnas recomendadas:
 
-- `giro_clientes_junio_plantilla.csv`
-- `metas_junio_2026.csv`
-- `ventas_junio_plantilla.csv`
-- `estructura_visitas_ejemplo.csv`
-- `cartera_vencida_ejemplo.csv`
-- `recuperacion_categorias_ejemplo.csv`
+- `Fecha` o `Mes`
+- `Vendedor` o `ALMACEN AGRUPADO` o `AGENTE_DE_VENTAS_CLIENTE`
+- `CodigoCliente`
+- `Cliente`
+- `Producto`
+- `Categoria` opcional, si no viene se cruza con el archivo Categorías
+- `Importe` / `Subtotal` / `Venta`
+- `Piezas`
 
-## Uso recomendado mensual
+Este archivo alimenta:
 
-1. Entrar a **Configuración**.
-2. Seleccionar el periodo activo, por ejemplo `2026-06` y nombre `Junio 2026`.
-3. Cargar metas del mes.
-4. Cargar venta real del mes por vendedor.
-5. Cargar visitas del mes.
-6. Cargar recuperación de categorías.
-7. Cargar giro clientes filtrado al mes.
-8. Cargar cartera vencida a partir del día 5.
+- Meta de Ventas: venta real por vendedor.
+- Incremento y recuperación de categoría.
+- Prospección y recuperación de clientes.
 
+### 3. Visitas
+Archivo sugerido: `visitas`
+
+Columnas recomendadas:
+
+- `Fecha`
+- `Vendedor`
+- `Cliente`
+- `Tipo`
+- `Ciudad`
+- `DuracionMin`
+
+La meta mensual se calcula con:
+
+`Meta semanal visitas x semanas del mes`
+
+Por defecto: `25 x 4 = 100 visitas al mes`.
+
+### 4. Categorías
+Archivo sugerido: `categorias`
+
+Columnas mínimas:
+
+- `Producto`
+- `Categoria`
+
+Sirve para enlazar cada producto vendido con su categoría comercial.
+
+### 5. No cobrado
+Archivo sugerido: `no cobrado`
+
+Columnas mínimas:
+
+- `Vendedor`
+- `Saldo` o `Deuda`
+
+La sección Cartera Vencida queda sólo como vendedor y deuda.
+
+### 6. Giro
+Archivo sugerido: `giro`
+
+Columnas recomendadas:
+
+- `Vendedor`
+- `CodigoCliente`
+- `Cliente`
+- `Giro`
+- `Venta` / `Subtotal` / `Importe`
+
+Sirve para revisar venta y participación por giro, con filtro por vendedor.
+
+## Notas importantes
+
+- La app guarda datos en el navegador usando localStorage.
+- Si un Excel `.xlsx` no carga, guardar el archivo como CSV desde Excel y volver a cargarlo.
+- También se puede pegar texto copiado desde Excel en cada bloque de Configuración.
+- Cada tabla trae botón **Exportar CSV**.
+- El Dashboard está diseñado compacto para verse completo sin scroll lateral.

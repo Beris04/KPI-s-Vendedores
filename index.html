@@ -3,45 +3,452 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ranking Vendedores GDL v8 · Toyo Foods</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Ranking Vendedores GDL · Cascarón KPI</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{
+      --bg:#f4f7fb; --panel:#ffffff; --ink:#172033; --muted:#64748b;
+      --blue:#0f4c81; --blue2:#1565a9; --light:#e8f1fb; --line:#d8e1ee;
+      --good:#16835a; --warn:#b26a00; --bad:#b42318; --shadow:0 10px 24px rgba(15,76,129,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,Segoe UI,Arial,sans-serif;font-size:14px}
+    header{background:linear-gradient(135deg,#083b68,#1565a9);color:#fff;padding:18px 22px;box-shadow:var(--shadow);position:sticky;top:0;z-index:20}
+    .head{display:flex;align-items:center;justify-content:space-between;gap:14px;max-width:1500px;margin:0 auto}
+    .brand h1{margin:0;font-size:22px;letter-spacing:.2px}.brand p{margin:4px 0 0;color:#dcecff;font-size:12px}
+    .chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.chip{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);padding:7px 10px;border-radius:999px;font-size:12px}
+    .layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:18px;max-width:1500px;margin:18px auto;padding:0 16px}
+    aside{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:12px;box-shadow:var(--shadow);align-self:start;position:sticky;top:92px}
+    .navbtn{width:100%;border:0;background:transparent;text-align:left;padding:11px 12px;border-radius:12px;color:var(--ink);cursor:pointer;font-weight:700;font-size:13px;margin:2px 0}
+    .navbtn:hover{background:#f0f6fd}.navbtn.active{background:var(--blue);color:#fff}
+    main{min-width:0}.view{display:none}.view.active{display:block}
+    .section-title{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:2px 0 14px}.section-title h2{margin:0;font-size:22px;color:#0b355d}.section-title p{margin:4px 0 0;color:var(--muted);font-size:13px}
+    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:14px;min-width:0}.card h3{margin:0 0 8px;color:#123a61;font-size:15px}.card p{margin:0;color:var(--muted);font-size:12px;line-height:1.35}
+    .kpi{font-size:26px;font-weight:900;margin-top:7px;color:#0b355d}.kpi small{font-size:12px;color:var(--muted);font-weight:700}.positive{color:var(--good)}.negative{color:var(--bad)}.warning{color:var(--warn)}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.toolbar h3{margin:0;color:#123a61;font-size:15px}.actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.mini{border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 9px;font-size:11px;font-weight:800;color:var(--blue);cursor:pointer}.mini:hover{background:#eff6ff}.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+    .tablebox{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:12px;margin-bottom:14px;min-width:0}.table-scroll{max-height:470px;overflow:auto;border-radius:12px;border:1px solid #e5edf6}.table-scroll.compact{max-height:none;overflow:visible;border:0}.table-scroll.yonly{overflow-y:auto;overflow-x:hidden}
+    table{width:100%;border-collapse:collapse;background:#fff}th,td{border-bottom:1px solid #edf2f7;padding:8px 9px;text-align:left;vertical-align:top}th{background:#eef5fc;color:#113c64;font-size:11px;text-transform:uppercase;letter-spacing:.35px;position:sticky;top:0;z-index:1}td{font-size:12.5px}tr:hover td{background:#f8fbff}.num{text-align:right;font-variant-numeric:tabular-nums}.center{text-align:center}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#eef5fc;color:#12466f;font-weight:800;font-size:11px}.pill-good{background:#e8f7ef;color:#136b49}.pill-warn{background:#fff4df;color:#925500}.pill-bad{background:#fdecec;color:#a31d14}
+    .dashboard-table{table-layout:fixed}.dashboard-table th,.dashboard-table td{font-size:11px;padding:7px 6px;word-break:break-word;white-space:normal}.dashboard-table th:nth-child(1){width:42px}.dashboard-table th:nth-child(2){width:180px}.dashboard-table th:nth-child(3),.dashboard-table th:nth-child(4){width:70px}.dashboard-table th:nth-child(5),.dashboard-table th:nth-child(8){width:96px}.dashboard-table th:nth-child(6),.dashboard-table th:nth-child(7){width:74px}.dashboard-table th:nth-child(9){width:64px}
+    .filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px}.filters label{font-size:12px;color:var(--muted);font-weight:800}.filters select,.filters input{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff;min-width:180px}.config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.config-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:var(--shadow)}.config-card h3{margin:0 0 4px;color:#0d3e66}.config-card .help{font-size:12px;color:var(--muted);margin-bottom:10px}.config-card input[type=file]{display:block;width:100%;border:1px dashed #b8c9dc;border-radius:12px;background:#f8fbff;padding:10px}.paste{width:100%;min-height:70px;border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px;font-family:Consolas,monospace;font-size:12px;resize:vertical;background:#fbfdff}.status{margin-top:8px;font-size:12px;color:var(--muted)}.row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}.field label{display:block;font-size:12px;color:var(--muted);font-weight:800;margin-bottom:4px}.field input,.field select{width:100%;border:1px solid var(--line);border-radius:12px;padding:9px 10px;background:#fff}.notice{background:#fff8e8;border:1px solid #ffe0a3;border-radius:14px;padding:10px 12px;color:#6b4300;font-size:12px;margin-bottom:12px}.ok{background:#ecfdf5;border-color:#bbf7d0;color:#14532d}.empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+    @media(max-width:1050px){.layout{grid-template-columns:1fr}aside{position:static}.grid,.grid.three,.grid.two,.config-grid,.row{grid-template-columns:1fr}.head{align-items:flex-start;flex-direction:column}.chips{justify-content:flex-start}.dashboard-table th,.dashboard-table td{font-size:10px;padding:6px 4px}.dashboard-table th:nth-child(2){width:130px}}
+    @media print{aside,header,.mini,.filters,.config-card{display:none}.layout{display:block;margin:0;padding:0}.view{display:block}.tablebox,.card{box-shadow:none}}
+  </style>
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">TF</div>
-        <div>
-          <h1>Ranking Vendedores</h1>
-          <p>Guadalajara · Junio 2026</p>
-        </div>
-      </div>
-      <nav id="navTabs" class="nav-tabs"></nav>
-      <div class="side-note">
-        <strong>Meta visitas</strong><br>
-        25 por semana · 100 mensual por vendedor
-      </div>
-    </aside>
-
-    <main class="content">
-      <header class="topbar">
-        <div>
-          <span class="eyebrow">Dashboard Comercial</span>
-          <h2 id="pageTitle">Dashboard</h2>
-        </div>
-        <div class="toolbar">
-          <select id="agentFilter"></select>
-          <button class="btn secondary" id="btnExportCurrent">Exportar hoja CSV</button>
-        </div>
-      </header>
-
-      <section id="qualityBanner" class="banner"></section>
-      <section id="viewContainer"></section>
-    </main>
+<header>
+  <div class="head">
+    <div class="brand"><h1>Ranking Vendedores GDL</h1><p>Cascarón de KPIs · carga mensual de Excel/CSV desde Configuración</p></div>
+    <div class="chips"><span class="chip" id="chipPeriod">Periodo: Junio 2026</span><span class="chip" id="chipSellers">Vendedores: 0</span><span class="chip" id="chipUpdated">Sin carga</span></div>
   </div>
+</header>
+<div class="layout">
+  <aside id="nav"></aside>
+  <main>
+    <section id="dashboard" class="view active"></section>
+    <section id="metas" class="view"></section>
+    <section id="visitas" class="view"></section>
+    <section id="categorias" class="view"></section>
+    <section id="prospectos" class="view"></section>
+    <section id="cartera" class="view"></section>
+    <section id="giro" class="view"></section>
+    <section id="config" class="view"></section>
+  </main>
+</div>
+<script>
+(function(){
+'use strict';
 
-  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="data.js"></script>
-  <script src="app.js"></script>
+const STORE_KEY = 'ranking_vendedores_cascaron_kpi_v1';
+const DEFAULT_METAS = [
+  ['AGENTE CLAVE  GDL',8014515.66],['GDL3 - MARICELA REYNOSO',1620839.60],['GDL13 - SANDRA NAVARRO',4469997.89],['OFICINA GDL',12268856.31],['GDL15 - ALDO SIERRA',965280.87],['GDL14- ARCENIO AGUIRRE',1091890.50],['RUTA ATOTONILCO GDL',859522.42],['GDL9 - ANTONIO V.',1518589.33],['RUTA CHAPALA GDL',388353.93],['RUTA JALOSTOTITLAN GDL',398108.11],['GDL5 - ALAN PEREZ',2299895.26],['RUTA TEQUILA GDL',403309.44],['RUTA SAHUAYO GDL',476428.46],['GDL6 - DANIEL  AGUILAR',5227475.61],['RUTA ARANDAS GDL',418162.50],['GDL4 - JULIO DE LA CRUZ',1082061.34],['RUTA LOS ALTOS GDL',639420.24],['GDL1 - OSCAR YEPEZ',1573563.46],['RUTA TAPALPA GDL',76133.16],['RUTA AMECA GDL',494512.25]
+].map(([v,meta])=>({vendedor:v,meta}));
+
+const DEFAULT_CONFIG = {period:'2026-06', monthLabel:'Junio 2026', visitWeeks:4, visitWeeklyGoal:25};
+const EXCLUDED = new Set(['GDL11 OSCAR MERCADO','GDL12 MIGUEL SEPULVEDA']);
+const ALIASES = {
+  'AGUILAR NERI DANIEL':'GDL6 - DANIEL  AGUILAR','DANIEL AGUILAR':'GDL6 - DANIEL  AGUILAR',
+  'YEPEZ MORA OSCAR ALBERTO':'GDL1 - OSCAR YEPEZ','YÉPEZ MORA OSCAR ALBERTO':'GDL1 - OSCAR YEPEZ','OSCAR YEPEZ':'GDL1 - OSCAR YEPEZ',
+  'PEREZ MAR ALAN ROBERTO':'GDL5 - ALAN PEREZ','PÉREZ MAR ALAN ROBERTO':'GDL5 - ALAN PEREZ','ALAN PEREZ':'GDL5 - ALAN PEREZ',
+  'REYNOSO AGUILAR MARICELA':'GDL3 - MARICELA REYNOSO','MARICELA REYNOSO':'GDL3 - MARICELA REYNOSO',
+  'SIERRA DE ANDA ALDO':'GDL15 - ALDO SIERRA','ALDO SIERRA':'GDL15 - ALDO SIERRA',
+  'DE LA CRUZ PONCE JULIO CESAR':'GDL4 - JULIO DE LA CRUZ','JULIO DE LA CRUZ':'GDL4 - JULIO DE LA CRUZ',
+  'VELEZ CASTELLANOS ANTONIO':'GDL9 - ANTONIO V.','VÉLEZ CASTELLANOS ANTONIO':'GDL9 - ANTONIO V.','ANTONIO V':'GDL9 - ANTONIO V.',
+  'AGUIRRE OJEDA ARCENIO':'GDL14- ARCENIO AGUIRRE','ARCENIO AGUIRRE':'GDL14- ARCENIO AGUIRRE',
+  'SANDRA NAVARRO NAVARRO':'GDL13 - SANDRA NAVARRO','SANDRA NAVARRO':'GDL13 - SANDRA NAVARRO'
+};
+
+let state = loadState();
+let currentTab = 'dashboard';
+let giroFilter = 'TODOS';
+
+const TABS = [
+  ['dashboard','Dashboard'],['metas','Meta de Ventas'],['visitas','Visita de clientes'],['categorias','Incremento y recuperación de categoría'],['prospectos','Prospección y recuperación de clientes'],['cartera','Cartera Vencida'],['giro','Giro de Clientes'],['config','Configuración']
+];
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){
+      const obj = JSON.parse(raw);
+      return Object.assign({config:Object.assign({},DEFAULT_CONFIG),metas:[],ventas:[],visitas:[],categorias:[],noCobrado:[],giro:[],raw:{}}, obj, {config:Object.assign({},DEFAULT_CONFIG,obj.config||{})});
+    }
+  }catch(e){console.warn(e)}
+  return {config:{...DEFAULT_CONFIG}, metas:DEFAULT_METAS, ventas:[], visitas:[], categorias:[], noCobrado:[], giro:[], raw:{}};
+}
+function saveState(){state.updatedAt = new Date().toISOString(); localStorage.setItem(STORE_KEY, JSON.stringify(state));}
+function resetAll(){if(confirm('¿Seguro que quieres borrar todas las cargas y regresar el cascarón a cero?')){localStorage.removeItem(STORE_KEY);state=loadState();renderAll();}}
+
+function norm(s){return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u00A0/g,' ').replace(/[^A-Za-z0-9]+/g,' ').trim().replace(/\s+/g,' ').toUpperCase();}
+function cleanVendor(v){
+  let s = String(v??'').replace(/\u00A0/g,' ').trim().replace(/\s+/g,' ');
+  if(!s) return '';
+  const n = norm(s);
+  if(EXCLUDED.has(n)) return '';
+  return ALIASES[n] || s;
+}
+function keyVendor(v){return norm(cleanVendor(v));}
+function money(n){const x=Number(n)||0;return x.toLocaleString('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0});}
+function money2(n){const x=Number(n)||0;return x.toLocaleString('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:2,maximumFractionDigits:2});}
+function pct(n){const x=Number(n)||0;return x.toLocaleString('es-MX',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';}
+function number(n){return (Number(n)||0).toLocaleString('es-MX',{maximumFractionDigits:0});}
+function parseNumber(value){
+  if(value===null||value===undefined||value==='') return 0;
+  if(typeof value==='number') return isFinite(value)?value:0;
+  let s=String(value).replace(/\u00A0/g,' ').trim();
+  if(!s) return 0;
+  const neg = /^\(.*\)$/.test(s) || /-$/.test(s);
+  s=s.replace(/[()$MXN\s]/gi,'').replace(/[^0-9,.-]/g,'');
+  if(!s) return 0;
+  const hasComma=s.includes(','), hasDot=s.includes('.');
+  if(hasComma && hasDot){
+    if(s.lastIndexOf(',') > s.lastIndexOf('.')) s=s.replace(/\./g,'').replace(',', '.');
+    else s=s.replace(/,/g,'');
+  }else if(hasComma && !hasDot){
+    const parts=s.split(',');
+    const last=parts[parts.length-1];
+    if(last.length<=2) s=parts.slice(0,-1).join('')+'.'+last;
+    else s=parts.join('');
+  }
+  const n=parseFloat(s);
+  return isFinite(n) ? (neg?-n:n) : 0;
+}
+function parseMonth(value){
+  if(value===null||value===undefined||value==='') return state.config.period;
+  if(typeof value==='number'){
+    const d = new Date(Math.round((value-25569)*86400*1000));
+    if(!isNaN(d)) return d.toISOString().slice(0,7);
+  }
+  let s=String(value).trim();
+  const ym=s.match(/(20\d{2})[-/](0?[1-9]|1[0-2])/); if(ym) return ym[1]+'-'+String(ym[2]).padStart(2,'0');
+  const dmy=s.match(/(\d{1,2})[-/](\d{1,2})[-/](20\d{2})/); if(dmy) return dmy[3]+'-'+String(dmy[2]).padStart(2,'0');
+  const my=s.match(/(0?[1-9]|1[0-2])[-/](20\d{2})/); if(my) return my[2]+'-'+String(my[1]).padStart(2,'0');
+  const months={ENERO:'01',FEBRERO:'02',MARZO:'03',ABRIL:'04',MAYO:'05',JUNIO:'06',JULIO:'07',AGOSTO:'08',SEPTIEMBRE:'09',SETIEMBRE:'09',OCTUBRE:'10',NOVIEMBRE:'11',DICIEMBRE:'12'};
+  const ns=norm(s); for(const [m,num] of Object.entries(months)){ if(ns.includes(m)){ const y=(ns.match(/20\d{2}/)||[state.config.period.slice(0,4)])[0]; return y+'-'+num; } }
+  return state.config.period;
+}
+function previousMonth(ym){const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function monthLess(a,b){return String(a||'') < String(b||'');}
+
+function pick(row, aliases){
+  if(!row) return '';
+  const keys=Object.keys(row); const map={}; keys.forEach(k=>map[norm(k)]=k);
+  for(const a of aliases){const k=map[norm(a)]; if(k!==undefined && row[k]!==undefined && row[k]!==null && String(row[k]).trim()!=='') return row[k];}
+  return '';
+}
+function unique(arr){return [...new Set(arr.filter(Boolean))];}
+function groupSum(rows, keyFn, valFn){const m=new Map(); rows.forEach(r=>{const k=keyFn(r); if(!k) return; m.set(k,(m.get(k)||0)+(Number(valFn(r))||0));}); return m;}
+
+function parseDelimited(text){
+  text = String(text||'').replace(/^\uFEFF/,'').replace(/\r/g,'').trim();
+  if(!text) return [];
+  if(/<table[\s\S]*<\/table>/i.test(text)) return parseHtmlTable(text);
+  const firstLine = text.split('\n').find(l=>l.trim()) || '';
+  const candidates=['\t',';',',','|'];
+  const delim = candidates.map(d=>[d,(firstLine.match(new RegExp('\\'+d,'g'))||[]).length]).sort((a,b)=>b[1]-a[1])[0][0];
+  const lines=text.split('\n').filter(l=>l.trim());
+  const rows=lines.map(line=>splitLine(line,delim));
+  return rowsToObjects(rows);
+}
+function splitLine(line, delim){
+  const out=[]; let cur='', q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){ if(q && line[i+1]==='"'){cur+='"';i++;} else q=!q; }
+    else if(c===delim && !q){ out.push(cur.trim()); cur=''; }
+    else cur+=c;
+  }
+  out.push(cur.trim()); return out;
+}
+function rowsToObjects(rows){
+  if(!rows.length) return [];
+  let headers=rows[0].map(h=>String(h||'').trim());
+  if(headers.every(h=>!h)) return [];
+  return rows.slice(1).filter(r=>r.some(c=>String(c||'').trim()!=='')).map(r=>{
+    let cells=r.slice();
+    if(cells.length>headers.length && headers.length===2){ cells=[cells[0], cells.slice(1).join('')]; }
+    if(cells.length>headers.length){ cells=cells.slice(0,headers.length-1).concat([cells.slice(headers.length-1).join(' ')]); }
+    const obj={}; headers.forEach((h,i)=>{obj[h||('COL_'+i)] = cells[i] ?? '';}); return obj;
+  });
+}
+function parseHtmlTable(html){
+  try{
+    const doc=new DOMParser().parseFromString(html,'text/html');
+    const table=doc.querySelector('table'); if(!table) return [];
+    const rows=[...table.querySelectorAll('tr')].map(tr=>[...tr.children].map(td=>td.textContent.trim()));
+    return rowsToObjects(rows);
+  }catch(e){return []}
+}
+async function parseFile(file){
+  const name=(file.name||'').toLowerCase();
+  if((name.endsWith('.xlsx') || name.endsWith('.xls')) && window.XLSX){
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:false,raw:false});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+    return rowsToObjects(rows);
+  }
+  const text=await file.text();
+  if(name.endsWith('.xls') && /<table/i.test(text)) return parseHtmlTable(text);
+  return parseDelimited(text);
+}
+
+function standardMetas(rows){return rows.map(r=>({vendedor:cleanVendor(pick(r,['Vendedor','Etiquetas de fila','Almacen agrupado','ALMACEN AGRUPADO','Agente','Vendedores'])), meta:parseNumber(pick(r,['Meta','Meta minima','META MÍNIMA','META MINIMA','Monto','Objetivo']))})).filter(r=>r.vendedor && r.meta>0);}
+function buildCategoryMap(){const map=new Map(); state.categorias.forEach(r=>{if(r.producto) map.set(norm(r.producto), r.categoria || 'Sin categoría');}); return map;}
+function standardCategorias(rows){return rows.map(r=>({producto:String(pick(r,['Producto','Descripcion producto','DESCRIPCIÓN DE PRODUCTO','Descripcion','Artículo','Articulo','ItemName','Nombre producto'])).trim(), categoria:String(pick(r,['Categoria','Categoría','Linea','Familia','Grupo','Category'])).trim()||'Sin categoría'})).filter(r=>r.producto);}
+function standardVentas(rows){
+  const catMap=buildCategoryMap();
+  return rows.map(r=>{
+    const product=String(pick(r,['Producto','Descripcion producto','DESCRIPCIÓN DE PRODUCTO','Descripcion','Artículo','Articulo','ItemName','Producto Nombre'])).trim();
+    const catDirect=String(pick(r,['Categoria','Categoría','Familia','Linea','Grupo','Category'])).trim();
+    const vendor=cleanVendor(pick(r,['Vendedor','AGENTE_DE_VENTAS_CLIENTE','Agente de ventas cliente','ALMACEN AGRUPADO','Almacen agrupado','Agente','Vendedor cliente']));
+    const amount=parseNumber(pick(r,['VENTA MES','Venta mes','Subtotal','SUBTOTAL','Venta','Importe','Total','Monto','LineTotal','Neto']));
+    const client=String(pick(r,['Cliente','Nombre Cliente','NOMBRE CLIENTE','Razón social','Razon social','CardName','Cliente Nombre'])).trim();
+    return {vendedor:vendor, codigo:String(pick(r,['Codigo de SN','CODIGO DE SN','Código Cliente','Codigo cliente','CardCode','Cod cliente'])).trim(), cliente:client, producto:product, categoria:catDirect || catMap.get(norm(product)) || '', importe:amount, piezas:parseNumber(pick(r,['Piezas','Cantidad','Qty','Unidades','Quantity'])), mes:parseMonth(pick(r,['Fecha','Fecha documento','DocDate','Fecha de contabilización','Fecha contabilidad','Mes','Periodo']))};
+  }).filter(r=>r.vendedor || r.cliente || r.importe || r.producto);
+}
+function standardVisitas(rows){return rows.map(r=>({fecha:String(pick(r,['Fecha','Dia','Día','Date','day','fecha visita'])).trim(), mes:parseMonth(pick(r,['Fecha','Dia','Día','Date','day','fecha visita','Mes'])), vendedor:cleanVendor(pick(r,['Vendedor','Nombre','Usuario','Agente','Vendor','agent'])), cliente:String(pick(r,['Cliente','Client','customer','Nombre cliente'])).trim(), tipo:String(pick(r,['Tipo','Type','Actividad','Motivo'])).trim(), ciudad:String(pick(r,['Ciudad','City','Zona'])).trim(), duracion:parseNumber(pick(r,['Duracion','Duración','duration_min','Duracion min','Tiempo']))})).filter(r=>r.vendedor || r.cliente || r.fecha);}
+function standardNoCobrado(rows){return rows.map(r=>({vendedor:cleanVendor(pick(r,['Vendedor','Agente','ALMACEN AGRUPADO','Almacen agrupado','Etiquetas de fila'])), cliente:String(pick(r,['Cliente','Nombre Cliente','CardName'])).trim(), deuda:parseNumber(pick(r,['Saldo','Deuda','No cobrado','NoCobrado','Importe','Monto','Vencido']))})).filter(r=>r.vendedor && r.deuda!==0);}
+function standardGiro(rows){return rows.map(r=>({vendedor:cleanVendor(pick(r,['Vendedor','Agente','ALMACEN AGRUPADO','Almacen agrupado','AGENTE_DE_VENTAS_CLIENTE'])), codigo:String(pick(r,['CODIGO DE SN','Codigo de SN','Codigo Cliente','CardCode','Código'])).trim(), cliente:String(pick(r,['Cliente','CLIENTE','Nombre Cliente','CardName'])).trim(), giro:String(pick(r,['Giro','GIRO','Tipo Cliente','Segmento'])).trim()||'Sin giro', venta:parseNumber(pick(r,['SUBTOTAL','Subtotal','VENTA','Venta','Importe','Total','Monto','Venta $']))})).filter(r=>r.cliente || r.giro || r.venta || r.vendedor);}
+
+function vendors(){
+  const list=[];
+  state.metas.forEach(r=>list.push(r.vendedor)); state.ventas.forEach(r=>list.push(r.vendedor)); state.visitas.forEach(r=>list.push(r.vendedor)); state.noCobrado.forEach(r=>list.push(r.vendedor)); state.giro.forEach(r=>list.push(r.vendedor));
+  const byKey=new Map(); list.forEach(v=>{const cv=cleanVendor(v); const k=keyVendor(cv); if(k&&!EXCLUDED.has(k)&&!byKey.has(k)) byKey.set(k,cv);});
+  return [...byKey.values()].sort((a,b)=>a.localeCompare(b,'es'));
+}
+function currentSalesRows(){return state.ventas.filter(r=>!r.mes || r.mes===state.config.period || state.ventas.every(x=>!x.mes));}
+function salesByVendor(){return groupSum(currentSalesRows(), r=>keyVendor(r.vendedor), r=>r.importe);}
+function metasByVendor(){const m=new Map(); state.metas.forEach(r=>{const k=keyVendor(r.vendedor); if(k) m.set(k,{vendedor:r.vendedor, meta:r.meta});}); return m;}
+function visitsByVendor(){const rows=state.visitas.filter(r=>!r.mes || r.mes===state.config.period); const m=new Map(); rows.forEach(r=>{const k=keyVendor(r.vendedor); if(k) m.set(k,(m.get(k)||0)+1);}); return m;}
+function debtByVendor(){return groupSum(state.noCobrado, r=>keyVendor(r.vendedor), r=>r.deuda);}
+
+function metaRows(){
+  const sm=salesByVendor(), mm=metasByVendor();
+  const all=unique([...vendors(), ...[...mm.values()].map(x=>x.vendedor)]);
+  return all.map(v=>{const k=keyVendor(v); const meta=(mm.get(k)||{}).meta||0; const venta=sm.get(k)||0; return {Vendedor:v, Meta:meta, 'Venta real':venta, 'Avance %':meta?venta/meta*100:0, 'Faltante en monto':Math.max(meta-venta,0)};}).sort((a,b)=>b['Avance %']-a['Avance %']);
+}
+function visitRows(){
+  const vm=visitsByVendor(); const goal=(Number(state.config.visitWeeklyGoal)||25)*(Number(state.config.visitWeeks)||4);
+  return vendors().map(v=>{const count=vm.get(keyVendor(v))||0; return {Vendedor:v,'Visitas en el mes':count,'Avance %':goal?count/goal*100:0,'Meta mensual':goal};}).sort((a,b)=>b['Avance %']-a['Avance %']);
+}
+
+function categoryAnalysis(){
+  const period=state.config.period, prev=previousMonth(period);
+  const detailed=state.ventas.filter(r=>r.cliente && (r.categoria || r.producto));
+  const groups=new Map();
+  detailed.forEach(r=>{
+    const cat=r.categoria || 'Sin categoría';
+    const k=[keyVendor(r.vendedor),norm(r.cliente),norm(cat)].join('||');
+    if(!groups.has(k)) groups.set(k,{vendedor:r.vendedor, cliente:r.cliente, categoria:cat, hist:0, prev:0, curr:0, histMonths:new Set()});
+    const g=groups.get(k); const val=Number(r.importe)||0;
+    if(r.mes===period) g.curr+=val;
+    else if(r.mes===prev) {g.prev+=val; g.hist+=val; g.histMonths.add(r.mes);}
+    else if(monthLess(r.mes,period)){g.hist+=val; g.histMonths.add(r.mes);}
+  });
+  const recovery=[], placement=[], detail=[];
+  groups.forEach(g=>{
+    const avg = g.histMonths.size ? g.hist/g.histMonths.size : g.hist;
+    if(g.hist>0 && g.curr===0){
+      const row={Tipo:'Recuperación pendiente',Vendedor:g.vendedor,Cliente:g.cliente,Categoría:g.categoria,'Dinero oportunidad':avg,'Venta actual':0,'Histórico':g.hist};
+      recovery.push(row); detail.push(row);
+    }
+    if(g.hist===0 && g.curr>0){
+      const row={Tipo:'Colocación nueva',Vendedor:g.vendedor,Cliente:g.cliente,Categoría:g.categoria,'Dinero oportunidad':0,'Venta actual':g.curr,'Histórico':0};
+      placement.push(row); detail.push(row);
+    }
+  });
+  const recCat=mapToRows(groupSum(recovery,r=>r.Categoría,r=>r['Dinero oportunidad']),'Categoría','Dinero oportunidad').map(r=>({...r,'Clientes': recovery.filter(x=>x.Categoría===r.Categoría).length, 'Participación %':0}));
+  addParticipation(recCat,'Dinero oportunidad');
+  const placeCat=mapToRows(groupSum(placement,r=>r.Categoría,r=>r['Venta actual']),'Categoría','Venta actual').map(r=>({...r,'Clientes': placement.filter(x=>x.Categoría===r.Categoría).length, 'Participación %':0}));
+  addParticipation(placeCat,'Venta actual');
+  const recVend=mapToRows(groupSum(recovery,r=>r.Vendedor,r=>r['Dinero oportunidad']),'Vendedor','Dinero oportunidad').map(r=>({...r,'Clientes/Categorías': recovery.filter(x=>x.Vendedor===r.Vendedor).length,'Participación %':0}));
+  addParticipation(recVend,'Dinero oportunidad');
+  const placeVend=mapToRows(groupSum(placement,r=>r.Vendedor,r=>r['Venta actual']),'Vendedor','Venta actual').map(r=>({...r,'Clientes/Categorías': placement.filter(x=>x.Vendedor===r.Vendedor).length,'Participación %':0}));
+  addParticipation(placeVend,'Venta actual');
+  return {recovery, placement, recCat:recCat.sort((a,b)=>b['Dinero oportunidad']-a['Dinero oportunidad']), placeCat:placeCat.sort((a,b)=>b['Venta actual']-a['Venta actual']), recVend:recVend.sort((a,b)=>b['Dinero oportunidad']-a['Dinero oportunidad']), placeVend:placeVend.sort((a,b)=>b['Venta actual']-a['Venta actual']), detail};
+}
+function mapToRows(map,kname,vname){return [...map.entries()].map(([k,v])=>({[kname]:k,[vname]:v}));}
+function addParticipation(rows,valKey){const t=rows.reduce((s,r)=>s+(Number(r[valKey])||0),0); rows.forEach(r=>r['Participación %']=t?(Number(r[valKey])||0)/t*100:0);}
+
+function clientAnalysis(){
+  const period=state.config.period, prev=previousMonth(period);
+  const detailed=state.ventas.filter(r=>r.cliente);
+  const groups=new Map();
+  detailed.forEach(r=>{
+    const k=norm(r.cliente); if(!groups.has(k)) groups.set(k,{cliente:r.cliente, vendedor:r.vendedor, hist:0, prev:0, curr:0});
+    const g=groups.get(k); const val=Number(r.importe)||0; if(r.mes===period){g.curr+=val; if(r.vendedor) g.vendedor=r.vendedor;} else if(r.mes===prev){g.prev+=val; g.hist+=val;} else if(monthLess(r.mes,period)) g.hist+=val;
+  });
+  const recovered=[], prospects=[];
+  groups.forEach(g=>{if(g.curr>0 && g.hist>0 && g.prev===0) recovered.push({Vendedor:g.vendedor,Cliente:g.cliente,'Venta actual':g.curr,'Histórico':g.hist}); if(g.curr>0 && g.hist===0) prospects.push({Vendedor:g.vendedor,Cliente:g.cliente,'Venta actual':g.curr});});
+  return {recovered:recovered.sort((a,b)=>b['Venta actual']-a['Venta actual']), prospects:prospects.sort((a,b)=>b['Venta actual']-a['Venta actual'])};
+}
+function categoryKpiByVendor(){const a=categoryAnalysis(); const m=new Map(); a.placement.forEach(r=>{const k=keyVendor(r.Vendedor); m.set(k,(m.get(k)||0)+(Number(r['Venta actual'])||0));}); return m;}
+function clientKpiByVendor(){const a=clientAnalysis(); const m=new Map(); [...a.recovered,...a.prospects].forEach(r=>{const k=keyVendor(r.Vendedor); m.set(k,(m.get(k)||0)+1);}); return m;}
+function dashboardRows(){
+  const mr=metaRows(), vr=visitRows(); const metaMap=new Map(mr.map(r=>[keyVendor(r.Vendedor),r])); const visitMap=new Map(vr.map(r=>[keyVendor(r.Vendedor),r])); const catMap=categoryKpiByVendor(); const cliMap=clientKpiByVendor(); const debt=debtByVendor();
+  const maxCat=Math.max(...[...catMap.values(),0]); const maxCli=Math.max(...[...cliMap.values(),0]); const maxDebt=Math.max(...[...debt.values(),0]);
+  const rows=vendors().map(v=>{const k=keyVendor(v); const ventaPct=(metaMap.get(k)||{})['Avance %']||0; const visitasPct=(visitMap.get(k)||{})['Avance %']||0; const cat=catMap.get(k)||0; const cli=cliMap.get(k)||0; const deuda=debt.get(k)||0; const scoreVenta=Math.min(ventaPct,100); const scoreVis=Math.min(visitasPct,100); const scoreCat=maxCat?cat/maxCat*100:0; const scoreCli=maxCli?cli/maxCli*100:0; const scoreDebt=maxDebt?Math.max(0,100-(deuda/maxDebt*100)):100; const score=(scoreVenta+scoreVis+scoreCat+scoreCli+scoreDebt)/5; return {'#':0,Vendedor:v,'Ventas %':ventaPct,'Visitas %':visitasPct,'Categorías $':cat,'Clientes':cli,'Cartera vencida':deuda,'Score':score};}).sort((a,b)=>b.Score-a.Score);
+  rows.forEach((r,i)=>r['#']=i+1); return rows;
+}
+function carteraRows(){return mapToRows(debtByVendor(),'Vendedor','Deuda').sort((a,b)=>b.Deuda-a.Deuda);}
+function giroData(){
+  const rows=state.giro.filter(r=>giroFilter==='TODOS' || keyVendor(r.vendedor)===keyVendor(giroFilter));
+  const total=rows.reduce((s,r)=>s+(Number(r.venta)||0),0);
+  const resumen=mapToRows(groupSum(rows,r=>r.giro||'Sin giro',r=>r.venta),'Giro','Venta').map(r=>({...r,'Clientes': unique(rows.filter(x=>(x.giro||'Sin giro')===r.Giro).map(x=>x.cliente)).length,'Participación %':total?Number(r.Venta)/total*100:0})).sort((a,b)=>b.Venta-a.Venta);
+  const vend=mapToRows(groupSum(rows,r=>r.vendedor||'Sin vendedor',r=>r.venta),'Vendedor','Venta').map(r=>({...r,'Clientes': unique(rows.filter(x=>(x.vendedor||'Sin vendedor')===r.Vendedor).map(x=>x.cliente)).length,'Participación %':total?Number(r.Venta)/total*100:0})).sort((a,b)=>b.Venta-a.Venta);
+  const detail=rows.map(r=>({Vendedor:r.vendedor,Código:r.codigo,Cliente:r.cliente,Giro:r.giro,'Venta $':r.venta,'% filtro':total?r.venta/total*100:0})).sort((a,b)=>b['Venta $']-a['Venta $']);
+  return {resumen:resumen,vendedores:vend,detail,total};
+}
+
+function fmtCell(value,key){
+  if(value===null||value===undefined) return '';
+  if(/%|Avance|Participación|Score/i.test(key)) return pct(value);
+  if(/Meta|Venta|Faltante|Dinero|Deuda|Cartera|Histórico|Importe|Saldo|Oportunidad|\$/i.test(key)) return money(value);
+  if(typeof value==='number') return number(value);
+  return String(value);
+}
+function renderTable(target, rows, cols, filename, opts={}){
+  const el = typeof target==='string' ? document.getElementById(target) : target;
+  const columns = cols || (rows[0]?Object.keys(rows[0]):[]);
+  const title = opts.title || '';
+  el.innerHTML = `<div class="toolbar"><h3>${title}</h3><div class="actions"><button class="mini" data-export="${filename||'tabla.csv'}">Exportar CSV</button></div></div>` +
+    `<div class="table-scroll ${opts.compact?'compact':''} ${opts.yonly?'yonly':''}">${rows.length?`<table class="${opts.className||''}"><thead><tr>${columns.map(c=>`<th class="${opts.numCols&&opts.numCols.includes(c)?'num':''}">${c}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${columns.map(c=>`<td class="${typeof r[c]==='number'?'num':''}">${fmtCell(r[c],c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`:`<div class="empty">Sin información. Carga el Excel correspondiente desde Configuración.</div>`}</div>`;
+  const btn=el.querySelector('[data-export]'); if(btn) btn.onclick=()=>downloadCsv(rows, filename||'tabla.csv');
+}
+function downloadCsv(rows, filename){
+  if(!rows || !rows.length){alert('No hay datos para exportar.'); return;}
+  const cols=Object.keys(rows[0]);
+  const csv=[cols.join(',')].concat(rows.map(r=>cols.map(c=>csvEscape(r[c])).join(','))).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),500);
+}
+function csvEscape(v){const s=String(v??''); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;}
+
+function viewHeader(title,sub){return `<div class="section-title"><div><h2>${title}</h2><p>${sub||''}</p></div></div>`;}
+function renderDashboard(){
+  const rows=dashboardRows(); const totalMeta=metaRows().reduce((s,r)=>s+r.Meta,0), totalSales=metaRows().reduce((s,r)=>s+r['Venta real'],0), totalDebt=carteraRows().reduce((s,r)=>s+r.Deuda,0);
+  document.getElementById('dashboard').innerHTML = viewHeader('Dashboard Ranking','Tabulador general por vendedor. La tabla está compacta para verse completa sin scroll lateral.') +
+    `<div class="grid"><div class="card"><h3>Venta real</h3><p>Periodo activo</p><div class="kpi">${money(totalSales)}</div></div><div class="card"><h3>Meta global</h3><p>Meta mínima cargada</p><div class="kpi">${money(totalMeta)}</div></div><div class="card"><h3>Avance global</h3><p>Venta / Meta</p><div class="kpi ${totalSales>=totalMeta?'positive':'warning'}">${pct(totalMeta?totalSales/totalMeta*100:0)}</div></div><div class="card"><h3>Cartera vencida</h3><p>No cobrado</p><div class="kpi negative">${money(totalDebt)}</div></div></div>`+
+    `<div class="tablebox" id="dashboardTable"></div>`;
+  renderTable('dashboardTable', rows, ['#','Vendedor','Ventas %','Visitas %','Categorías $','Clientes','Cartera vencida','Score'], 'dashboard_ranking.csv', {title:'Ranking general',compact:true,className:'dashboard-table'});
+}
+function renderMetas(){
+  document.getElementById('metas').innerHTML = viewHeader('Meta de Ventas','Columnas fijas: Vendedor, Meta, Venta real, Avance % y Faltante en monto.') + `<div class="tablebox" id="metasTable"></div>`;
+  renderTable('metasTable', metaRows(), ['Vendedor','Meta','Venta real','Avance %','Faltante en monto'], 'meta_de_ventas.csv', {title:'Avance por vendedor'});
+}
+function renderVisitas(){
+  const detail=state.visitas.filter(r=>!r.mes||r.mes===state.config.period).map(r=>({Fecha:r.fecha,Vendedor:r.vendedor,Cliente:r.cliente,Tipo:r.tipo,Ciudad:r.ciudad,'Duración min':r.duracion}));
+  document.getElementById('visitas').innerHTML = viewHeader('Visita de clientes','Meta: 25 clientes por semana. La meta mensual se calcula desde Configuración.') + `<div class="tablebox" id="vis1"></div><div class="tablebox" id="vis2"></div>`;
+  renderTable('vis1', visitRows(), ['Vendedor','Visitas en el mes','Avance %','Meta mensual'], 'visitas_resumen.csv', {title:'Primera tabla · avance mensual'});
+  renderTable('vis2', detail, ['Fecha','Vendedor','Cliente','Tipo','Ciudad','Duración min'], 'visitas_detalle.csv', {title:'Segunda tabla · detalle de visitas cargadas'});
+}
+function renderCategorias(){
+  const a=categoryAnalysis();
+  document.getElementById('categorias').innerHTML = viewHeader('Incremento y recuperación de Categoría','Cruce entre Excel de Categorías y Excel de Ventas. Detecta oportunidad de recuperación y colocación nueva por cliente/categoría.') +
+    `<div class="notice">Para que esta sección funcione completo, el Excel de ventas debe traer cliente, vendedor, producto, fecha/mes e importe. El Excel de categorías debe traer producto y categoría.</div>`+
+    `<div class="tablebox" id="cat1"></div><div class="tablebox" id="cat2"></div><div class="grid two"><div class="tablebox" id="cat3"></div><div class="tablebox" id="cat4"></div></div><div class="tablebox" id="cat5"></div>`;
+  renderTable('cat1', a.recCat, ['Categoría','Clientes','Dinero oportunidad','Participación %'], 'recuperacion_categoria_global.csv', {title:'Tabla 1 · Recuperación por categoría en global'});
+  renderTable('cat2', a.placeCat, ['Categoría','Clientes','Venta actual','Participación %'], 'colocacion_categoria_global.csv', {title:'Tabla 2 · Colocación de categoría'});
+  renderTable('cat3', a.recVend, ['Vendedor','Clientes/Categorías','Dinero oportunidad','Participación %'], 'recuperacion_categoria_vendedor.csv', {title:'Tabla 3 · Recuperación por vendedor'});
+  renderTable('cat4', a.placeVend, ['Vendedor','Clientes/Categorías','Venta actual','Participación %'], 'colocacion_categoria_vendedor.csv', {title:'Tabla 4 · Colocación por vendedor'});
+  renderTable('cat5', a.detail, ['Tipo','Vendedor','Cliente','Categoría','Dinero oportunidad','Venta actual','Histórico'], 'detalle_categorias.csv', {title:'Tabla 5 · Detalle completo'});
+}
+function renderProspectos(){
+  const a=clientAnalysis();
+  document.getElementById('prospectos').innerHTML = viewHeader('Prospección y recuperación de clientes','Clientes recuperados: compraban antes, no compraron el mes anterior y volvieron en el periodo activo. Prospectos: clientes con compra actual sin historial previo en el Excel de ventas.') + `<div class="grid two"><div class="tablebox" id="pro1"></div><div class="tablebox" id="pro2"></div></div>`;
+  renderTable('pro1', a.recovered, ['Vendedor','Cliente','Venta actual','Histórico'], 'clientes_recuperados.csv', {title:'Tabla 1 · Clientes recuperados'});
+  renderTable('pro2', a.prospects, ['Vendedor','Cliente','Venta actual'], 'prospectos_nuevos.csv', {title:'Tabla 2 · Prospectos nuevos'});
+}
+function renderCartera(){
+  document.getElementById('cartera').innerHTML = viewHeader('Cartera Vencida','Se alimenta con el Excel “no cobrado”. Tabla fija: Vendedor y Deuda.') + `<div class="tablebox" id="carteraTable"></div>`;
+  renderTable('carteraTable', carteraRows(), ['Vendedor','Deuda'], 'cartera_vencida.csv', {title:'No cobrado por vendedor'});
+}
+function renderGiro(){
+  const data=giroData(); const sel=vendorsForGiro();
+  document.getElementById('giro').innerHTML = viewHeader('Giro de Clientes','Información estratégica fuera de KPIs. Se alimenta con el Excel “giro”.') +
+    `<div class="filters"><label>Filtrar vendedor</label><select id="giroFilter"><option value="TODOS">Todos los vendedores</option>${sel.map(v=>`<option value="${v}" ${giroFilter===v?'selected':''}>${v}</option>`).join('')}</select><span class="badge">Venta filtro: ${money(data.total)}</span></div>`+
+    `<div class="grid two"><div class="tablebox" id="giro1"></div><div class="tablebox" id="giro2"></div></div><div class="tablebox" id="giro3"></div>`;
+  document.getElementById('giroFilter').onchange=e=>{giroFilter=e.target.value;renderGiro();};
+  renderTable('giro1', data.resumen, ['Giro','Clientes','Venta','Participación %'], 'giro_resumen.csv', {title:'Venta y participación por giro'});
+  renderTable('giro2', data.vendedores, ['Vendedor','Clientes','Venta','Participación %'], 'giro_por_vendedor.csv', {title:'Relación por vendedor'});
+  renderTable('giro3', data.detail, ['Vendedor','Código','Cliente','Giro','Venta $','% filtro'], 'giro_detalle.csv', {title:'Detalle cliente / giro / vendedor'});
+}
+function vendorsForGiro(){return unique(state.giro.map(r=>r.vendedor)).sort((a,b)=>a.localeCompare(b,'es'));}
+
+const IMPORTS = [
+  {kind:'metas', title:'KPI Meta de Ventas · Metas', desc:'Excel/CSV con columnas: Vendedor y Meta. Sólo se usa meta mínima.', template:'plantilla_metas_junio_2026.csv'},
+  {kind:'ventas', title:'KPI Ventas / Categorías / Prospectos · Ventas', desc:'Excel de ventas con fecha, vendedor, cliente, producto, importe y piezas. Alimenta Meta de Ventas, Categorías y Prospectos.', template:'plantilla_ventas.csv'},
+  {kind:'visitas', title:'KPI Visita de clientes · Visitas', desc:'Excel mensual de visitas. Columnas recomendadas: Fecha, Vendedor, Cliente, Tipo, Ciudad, Duración.', template:'plantilla_visitas.csv'},
+  {kind:'categorias', title:'KPI Incremento y Recuperación · Categorías', desc:'Catálogo para enlazar producto con categoría. Columnas: Producto y Categoría.', template:'plantilla_categorias.csv'},
+  {kind:'noCobrado', title:'KPI Cartera Vencida · No cobrado', desc:'Excel de saldos vencidos. Columnas: Vendedor y Saldo/Deuda. También acepta texto pegado.', template:'plantilla_no_cobrado.csv'},
+  {kind:'giro', title:'Estrategia · Giro de clientes', desc:'Excel con Vendedor, Cliente, Giro y Venta/Importe para participación por giro.', template:'plantilla_giro.csv'}
+];
+function renderConfig(){
+  document.getElementById('config').innerHTML = viewHeader('Configuración','Aquí se cargan todos los archivos que alimentan los KPIs. Las demás secciones quedan sólo como consulta.') +
+    `<div class="notice ok">Cascarón fijo: carga archivos, revisa KPIs y exporta cada tabla en CSV. Los datos se guardan en este navegador con localStorage.</div>`+
+    `<div class="card"><h3>Periodo y reglas</h3><div class="row"><div class="field"><label>Periodo activo</label><input id="cfgPeriod" type="month" value="${state.config.period}"></div><div class="field"><label>Nombre del reporte</label><input id="cfgMonthLabel" value="${state.config.monthLabel}"></div><div class="field"><label>Semanas para meta visitas</label><input id="cfgWeeks" type="number" min="1" step="1" value="${state.config.visitWeeks}"></div></div><div class="row"><div class="field"><label>Meta semanal visitas</label><input id="cfgWeekly" type="number" min="1" step="1" value="${state.config.visitWeeklyGoal}"></div><div class="field"><label>Meta mensual visitas</label><input value="${(Number(state.config.visitWeeklyGoal)||25)*(Number(state.config.visitWeeks)||4)}" disabled></div><div class="field"><label>Acciones</label><button class="mini primary" id="saveCfg">Guardar configuración</button> <button class="mini" id="resetAll">Borrar cargas</button></div></div></div>`+
+    `<div class="config-grid">${IMPORTS.map(cardHtml).join('')}</div>`;
+  document.getElementById('saveCfg').onclick=()=>{state.config.period=document.getElementById('cfgPeriod').value||state.config.period; state.config.monthLabel=document.getElementById('cfgMonthLabel').value||state.config.monthLabel; state.config.visitWeeks=parseNumber(document.getElementById('cfgWeeks').value)||4; state.config.visitWeeklyGoal=parseNumber(document.getElementById('cfgWeekly').value)||25; saveState(); renderAll();};
+  document.getElementById('resetAll').onclick=resetAll;
+  IMPORTS.forEach(it=>{
+    const file=document.getElementById(`file_${it.kind}`); const paste=document.getElementById(`paste_${it.kind}`); const btn=document.getElementById(`btn_${it.kind}`); const clear=document.getElementById(`clear_${it.kind}`);
+    file.onchange=async e=>{const f=e.target.files[0]; if(!f) return; await loadRows(it.kind, await parseFile(f), f.name);};
+    btn.onclick=async()=>{await loadRows(it.kind, parseDelimited(paste.value), 'texto pegado');};
+    clear.onclick=()=>{state[it.kind]=[]; saveState(); renderAll();};
+  });
+}
+function cardHtml(it){const count=(state[it.kind]||[]).length; return `<div class="config-card"><h3>${it.title}</h3><div class="help">${it.desc}</div><input id="file_${it.kind}" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv"><textarea class="paste" id="paste_${it.kind}" placeholder="También puedes pegar aquí la tabla desde Excel..."></textarea><div class="actions" style="margin-top:8px"><button class="mini primary" id="btn_${it.kind}">Importar texto</button><button class="mini" onclick="downloadTemplate('${it.template}')">Descargar plantilla</button><button class="mini" id="clear_${it.kind}">Limpiar</button></div><div class="status">Registros cargados: <b>${count}</b></div></div>`;}
+async function loadRows(kind, rows, source){
+  try{
+    let clean=[];
+    if(kind==='metas') clean=standardMetas(rows);
+    if(kind==='ventas') clean=standardVentas(rows);
+    if(kind==='visitas') clean=standardVisitas(rows);
+    if(kind==='categorias') clean=standardCategorias(rows);
+    if(kind==='noCobrado') clean=standardNoCobrado(rows);
+    if(kind==='giro') clean=standardGiro(rows);
+    state[kind]=clean; state.raw[kind]={source,rows:rows.length,loaded:new Date().toISOString()}; saveState(); renderAll(); alert(`Carga lista: ${clean.length} registros en ${source}.`);
+  }catch(e){console.error(e); alert('No pude procesar el archivo. Revisa encabezados o guárdalo como CSV.');}
+}
+window.downloadTemplate=function(filename){
+  const templates={
+    'plantilla_metas_junio_2026.csv':['Vendedor,Meta',...DEFAULT_METAS.map(r=>`${csvEscape(r.vendedor)},${r.meta}`)].join('\n'),
+    'plantilla_ventas.csv':'Fecha,Vendedor,CodigoCliente,Cliente,Producto,Categoria,Importe,Piezas\n2026-06-01,GDL6 - DANIEL  AGUILAR,C0001,CLIENTE EJEMPLO,PRODUCTO EJEMPLO,Salsas / Condimentos,1500,3',
+    'plantilla_visitas.csv':'Fecha,Vendedor,Cliente,Tipo,Ciudad,DuracionMin\n2026-06-01,GDL6 - DANIEL  AGUILAR,CLIENTE EJEMPLO,Seguimiento,GDL,25',
+    'plantilla_categorias.csv':'Producto,Categoria\nPRODUCTO EJEMPLO,Salsas / Condimentos',
+    'plantilla_no_cobrado.csv':'Vendedor,Saldo\nGDL6 - DANIEL  AGUILAR,828.00',
+    'plantilla_giro.csv':'Vendedor,CodigoCliente,Cliente,Giro,Venta\nGDL6 - DANIEL  AGUILAR,C0001,CLIENTE EJEMPLO,Restaurante,1500'
+  };
+  const blob=new Blob(['\uFEFF'+(templates[filename]||'')],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),500);
+}
+
+function renderNav(){document.getElementById('nav').innerHTML=TABS.map(([id,label])=>`<button class="navbtn ${id===currentTab?'active':''}" data-tab="${id}">${label}</button>`).join(''); document.querySelectorAll('.navbtn').forEach(b=>b.onclick=()=>{currentTab=b.dataset.tab; showTab(currentTab);});}
+function showTab(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));}
+function renderChips(){document.getElementById('chipPeriod').textContent='Periodo: '+(state.config.monthLabel||state.config.period); document.getElementById('chipSellers').textContent='Vendedores: '+vendors().length; document.getElementById('chipUpdated').textContent=state.updatedAt?'Actualizado: '+new Date(state.updatedAt).toLocaleString('es-MX'):'Sin carga';}
+function renderAll(){renderNav(); renderChips(); renderDashboard(); renderMetas(); renderVisitas(); renderCategorias(); renderProspectos(); renderCartera(); renderGiro(); renderConfig(); showTab(currentTab);}
+
+renderAll();
+})();
+</script>
 </body>
 </html>
