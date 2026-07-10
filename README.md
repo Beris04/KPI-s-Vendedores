@@ -1,34 +1,14 @@
-# Ranking Vendedores GDL · Ejecutivo v2
+# Ranking Vendedores GDL Ejecutivo Unico v3
 
-## Acceso
-Usuario: Toyo
-Contraseña: Toyo2026
+Acceso:
+- Usuario: Toyo
+- Contraseña: Toyo2026
 
-## Flujo recomendado
-1. Abrir `index.html`.
-2. Entrar con usuario y contraseña.
-3. La información ya viene precargada para Junio 2026.
-4. Para actualizar sin depender de librerías externas, ir a Configuración y cargar el archivo:
-   `Alimentador_Ranking_Vendedores_Junio_2026_v2.xls`
+Archivos principales:
+- index.html: dashboard ejecutivo con datos precargados.
+- Alimentador_Ranking_Vendedores_Junio_2026_v3.xls: archivo único que se puede cargar desde Configuración.
+- Alimentador_Ranking_Vendedores_Junio_2026_v3.xlsx: respaldo editable para revisión en Excel.
 
-## Archivos incluidos
-- `index.html`: dashboard ejecutivo autónomo, sin internet ni librerías externas.
-- `Alimentador_Ranking_Vendedores_Junio_2026_v2.xls`: alimentador único compatible con Excel XML y con el index.
-- `Alimentador_Ranking_Vendedores_Junio_2026_v2.xlsx`: respaldo ejecutivo en Excel moderno.
-- `ranking_data.json`: respaldo técnico de datos.
+Periodo activo: Junio 2026
 
-## KPIs integrados
-- Meta de Ventas.
-- Visitas a clientes.
-- Incremento y recuperación de categoría.
-- Prospectos nuevos y recuperación de clientes.
-- Cartera vencida.
-- Giro de clientes.
-
-## Notas de calidad
-- DATA principal alimenta ventas, categorías, prospectos y recuperación.
-- Admin visitas alimenta visitas.
-- Categorias.xlsx enlaza producto con categoría.
-- Data giro alimenta venta por giro.
-- Cartera vencida se tomó de la relación capturada previamente en conversación.
-- El archivo DATA venía con aviso de límite a 150,000 filas; si hay diferencias contra SAP/BI, exportar el DATA completo.
+Notas: El archivo de ventas indica límite de exportación a 150000 renglones; si faltan datos, conviene exportar por mes o sin límite.
