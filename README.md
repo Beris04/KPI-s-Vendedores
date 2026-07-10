@@ -1,17 +1,34 @@
-# Ranking Vendedores GDL · Alimentador único
+# Ranking Vendedores GDL · Ejecutivo v2
 
 ## Acceso
-Usuario: Toyo  
+Usuario: Toyo
 Contraseña: Toyo2026
 
-## Uso
-1. Abre `index.html`.
-2. Entra a Configuración.
-3. Carga `Alimentador_Ranking_Vendedores_Junio_2026.xlsx`.
-4. Revisa las secciones de KPIs y exporta CSV desde cada tabla.
+## Flujo recomendado
+1. Abrir `index.html`.
+2. Entrar con usuario y contraseña.
+3. La información ya viene precargada para Junio 2026.
+4. Para actualizar sin depender de librerías externas, ir a Configuración y cargar el archivo:
+   `Alimentador_Ranking_Vendedores_Junio_2026_v2.xls`
 
-## Flujo mensual
-Cada mes se genera un nuevo alimentador Excel con los archivos fuente del mes: DATA, Categorias, Visitas, Giro y No Cobrado si aplica.
+## Archivos incluidos
+- `index.html`: dashboard ejecutivo autónomo, sin internet ni librerías externas.
+- `Alimentador_Ranking_Vendedores_Junio_2026_v2.xls`: alimentador único compatible con Excel XML y con el index.
+- `Alimentador_Ranking_Vendedores_Junio_2026_v2.xlsx`: respaldo ejecutivo en Excel moderno.
+- `ranking_data.json`: respaldo técnico de datos.
 
-## Nota
-El botón “Cargar alimentador incluido” funciona cuando el sitio está publicado en GitHub Pages. Si abres el archivo directo en Windows, usa “Elegir archivo”.
+## KPIs integrados
+- Meta de Ventas.
+- Visitas a clientes.
+- Incremento y recuperación de categoría.
+- Prospectos nuevos y recuperación de clientes.
+- Cartera vencida.
+- Giro de clientes.
+
+## Notas de calidad
+- DATA principal alimenta ventas, categorías, prospectos y recuperación.
+- Admin visitas alimenta visitas.
+- Categorias.xlsx enlaza producto con categoría.
+- Data giro alimenta venta por giro.
+- Cartera vencida se tomó de la relación capturada previamente en conversación.
+- El archivo DATA venía con aviso de límite a 150,000 filas; si hay diferencias contra SAP/BI, exportar el DATA completo.
