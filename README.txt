@@ -1,12 +1,19 @@
-Ranking Vendedores GDL Ejecutivo v4
+Ranking Vendedores GDL - Version Power BI v5
 
-1. Extrae TODO el ZIP en una carpeta.
-2. Abre index.html.
-3. Usuario: Toyo
-4. Contraseña: Toyo2026
+Acceso:
+Usuario: Toyo
+Contrasena: Toyo2026
 
 IMPORTANTE:
-- No abras el index dentro del visor del ZIP; primero extrae la carpeta completa.
-- El archivo data.js debe estar en la misma carpeta que index.html.
-- La versión trae datos precargados de Junio 2026.
-- En Configuración puedes cargar el alimentador_ranking_junio_2026.json para actualizar los datos.
+1. Extrae todo el ZIP en una carpeta.
+2. Abre index.html.
+3. El filtro superior permite cambiar entre Junio y Julio.
+4. Al cargar un nuevo alimentador JSON, las metas editadas se conservan y no se reemplazan.
+5. Para modificar metas: Configuracion > Modificar metas > Guardar metas.
+
+Archivos incluidos:
+- index.html
+- data.js
+- toyo_logo.png
+- alimentador_ranking_junio_2026.json
+- alimentador_ranking_julio_2026.json
